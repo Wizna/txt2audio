@@ -138,7 +138,7 @@ def construct_text_and_name(raw_data, book_name: str, generate=True):
                 x = re.search(pattern, line)
                 if x:
                     matched_chapter_name = x.group()
-                    chapter_structure[idx + 1] = matched_chapter_name
+                    chapter_structure[idx + 1] = matched_chapter_name.strip()
                     # NOTE: 前提是先卷，后章
                     empty_structure(chapter_structure, start=idx + 2)
         else:
