@@ -1,13 +1,17 @@
 from typing import List
+import io
+from contextlib import redirect_stdout
+import unicodedata
 
 from TTS.api import TTS
-from charset_normalizer import from_path
+from charset_normalizer import from_path, from_bytes
 import re
 import os
 from tqdm import tqdm
 from pathlib import Path
 import numpy as np
 from scipy.io.wavfile import write
+from logmmse import logmmse
 
 model_name = 'tts_models/zh-CN/baker/tacotron2-DDC-GST'
 tts = TTS(model_name=model_name, progress_bar=True, gpu=False)
@@ -15,10 +19,21 @@ tts = TTS(model_name=model_name, progress_bar=True, gpu=False)
 book_delimiter = '卷章'
 
 
+def print_to_string(*args, **kwargs):
+    output = io.StringIO()
+    print(*args, file=output, **kwargs)
+    contents = output.getvalue()
+    output.close()
+    return contents
+
+
 def load_txt_file(file_path):
     results = from_path(file_path)
+    with io.StringIO() as buf, redirect_stdout(buf):
+        print(results.best())
+        output = buf.getvalue()
 
-    return str(results.best())
+        return output
 
 
 def generate_audio_clip(text: List, output_path: str, sample_rate=22050):
@@ -28,11 +43,13 @@ def generate_audio_clip(text: List, output_path: str, sample_rate=22050):
         wav = tts.tts(text=sentences)
         audio_clip.extend(wav)
 
-    write(output_path, sample_rate, np.array(audio_clip))
+    final_result = audio_enhancement(audio_clip)
+    write(output_path, sample_rate, final_result)
 
 
 def mask_punctuations(text):
     # text = text.replace('“', '"').replace('”', '"')
+    text = unicodedata.normalize('NFKC', text)
     text = re.sub(r'[…]+', '。', text)
     text = text.replace('·', '')
     text = re.sub(r'[=]+', '。', text)
@@ -46,7 +63,7 @@ def mask_punctuations(text):
     return text
 
 
-def generate_chapter(chapter_text: List, chapter_name, last_special_delimiter):
+def generate_chapter(chapter_text: List, chapter_name, last_special_delimiter, generate=True):
     if last_special_delimiter:
         combined_name = '/'.join([i for i in chapter_name if i])
     else:
@@ -57,7 +74,8 @@ def generate_chapter(chapter_text: List, chapter_name, last_special_delimiter):
         return
     output_path = f'../output/{combined_name}.wav'
     print(output_path)
-
+    if not generate:
+        return
     Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
     generate_audio_clip(chapter_text, output_path=output_path)
 
@@ -77,10 +95,10 @@ def empty_structure(chapter_structure, start):
         chapter_structure[i] = ''
 
 
-def construct_text_and_name(raw_data, book_name: str):
+def construct_text_and_name(raw_data, book_name: str, generate=True):
     chapter_structure = [book_name] + ['' for _ in book_delimiter] + ['']
     contents = []
-    input_text_lines = raw_data.split('\n')
+    input_text_lines = re.split('\r\n|\n', raw_data)
     last_special_delimiter = False
 
     for line in input_text_lines:
@@ -103,20 +121,17 @@ def construct_text_and_name(raw_data, book_name: str):
 
         if new_chapter and contents:
             generate_chapter(chapter_text=contents, chapter_name=chapter_structure,
-                             last_special_delimiter=last_special_delimiter)
+                             last_special_delimiter=last_special_delimiter, generate=generate)
             last_special_delimiter = False
             contents = []
 
             for idx, delimiter in enumerate(book_delimiter):
-                pattern = f"第[零一二三四五六七八九十]+{delimiter}"
+                pattern = f"(^|\s)第[零一二三四五六七八九十]+{delimiter}($|\s)"
                 x = re.search(pattern, line)
                 if x:
                     matched_chapter_name = x.group()
                     chapter_structure[idx + 1] = matched_chapter_name
                     empty_structure(chapter_structure, start=idx + 2)
-
-
-
         else:
             contents.append(line)
 
@@ -125,11 +140,17 @@ def construct_text_and_name(raw_data, book_name: str):
 
     if contents:
         generate_chapter(chapter_text=contents, chapter_name=chapter_structure,
-                         last_special_delimiter=last_special_delimiter)
+                         last_special_delimiter=last_special_delimiter, generate=generate)
+
+
+def audio_enhancement(wav):
+    enhanced_wav = logmmse(np.array(wav, dtype=np.float32), 22050, output_file=None,
+                           initial_noise=1, window_size=160, noise_threshold=0.15)
+    return enhanced_wav
 
 
 def process(book_file_path):
     book_name = os.path.basename(book_file_path).split('.')[0]
     print(f'=========== start processing {book_name} =============')
     raw_data = load_txt_file(book_file_path)
-    construct_text_and_name(raw_data=raw_data, book_name=book_name)
+    construct_text_and_name(raw_data=raw_data, book_name=book_name, generate=False)
