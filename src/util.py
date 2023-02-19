@@ -123,8 +123,11 @@ def construct_text_and_name(raw_data, book_name: str, generate=True):
             pattern = get_delimiter_pattern(delimiter)
             x = re.search(pattern, line)
             if x:
-                new_chapter = True
-                break
+                matched_chapter_name = x.group()
+                if chapter_structure[idx + 1] != matched_chapter_name.strip():
+                    # NOTE: 有时候文章中会插入卷/章节，如果和之前没有变化，那么就继续
+                    new_chapter = True
+                    break
 
         if new_chapter:
             if contents:
@@ -162,4 +165,4 @@ def process(book_file_path):
     book_name = os.path.basename(book_file_path).split('.')[0]
     print(f'=========== start processing {book_name} =============')
     raw_data = load_txt_file(book_file_path)
-    construct_text_and_name(raw_data=raw_data, book_name=book_name, generate=True)
+    construct_text_and_name(raw_data=raw_data, book_name=book_name, generate=False)
