@@ -162,4 +162,4 @@ def process(book_file_path):
     book_name = os.path.basename(book_file_path).split('.')[0]
     print(f'=========== start processing {book_name} =============')
     raw_data = load_txt_file(book_file_path)
-    construct_text_and_name(raw_data=raw_data, book_name=book_name, generate=False)
+    construct_text_and_name(raw_data=raw_data, book_name=book_name, generate=True)
