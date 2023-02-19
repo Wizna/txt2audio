@@ -1,9 +1,9 @@
 import sys
-from util import generate_audio_clip
+from util import process
 
 
 def main() -> int:
-    generate_audio_clip('')
+    process('/Users/huangruiming/workspace/txt2audio/demo/《英雄志》（校对第1-22卷）作者：孙晓.txt')
     return 0
 
 
