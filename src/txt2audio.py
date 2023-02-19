@@ -3,7 +3,7 @@ from util import process
 
 
 def main() -> int:
-    process('/Users/huangruiming/Documents/book/《亵渎》（精校版全本）作者：烟雨江南.txt')
+    process('/Users/huangruiming/Documents/book/《英雄志》（校对第1-22卷）作者：孙晓.txt')
     return 0
 
 
