@@ -49,7 +49,6 @@ def generate_audio_clip(text: List, output_path: str, sample_rate=22050):
 
 def mask_punctuations(text):
     # text = text.replace('“', '"').replace('”', '"')
-    text = unicodedata.normalize('NFKC', text)
     text = re.sub(r'[…]+', '。', text)
     text = text.replace('·', '')
     text = re.sub(r'[=]+', '。', text)
@@ -82,7 +81,7 @@ def generate_chapter(chapter_text: List, chapter_name, last_special_delimiter, g
 
 def check_special_delimiter(text):
     for sub_text in text.split(' '):
-        for p in ['序', '序章', '序言', '前言', '楔子', '引言', '后记', '番外', '外篇']:
+        for p in ['序', '序章', '序言', '前言', '楔子', '引言', '后记']:
             if p == sub_text:
                 return p
 
@@ -95,6 +94,11 @@ def empty_structure(chapter_structure, start):
         chapter_structure[i] = ''
 
 
+def get_delimiter_pattern(delimiter):
+    # f"(^|\s)第[零一二三四五六七八九十]+{delimiter}($|\s)"
+    return f"(^|\s)第[零一二三四五六七八九十]+{delimiter}($|\s)"
+
+
 def construct_text_and_name(raw_data, book_name: str, generate=True):
     chapter_structure = [book_name] + ['' for _ in book_delimiter] + ['']
     contents = []
@@ -102,7 +106,10 @@ def construct_text_and_name(raw_data, book_name: str, generate=True):
     last_special_delimiter = False
 
     for line in input_text_lines:
+        # line = unicodedata.normalize('NFKC', line)
+
         line = line.strip()
+
         if not line:
             continue
 
@@ -113,24 +120,26 @@ def construct_text_and_name(raw_data, book_name: str, generate=True):
             chapter_structure[-1] = special_delimiter
 
         for idx, delimiter in enumerate(book_delimiter):
-            pattern = f"(^|\s)第[零一二三四五六七八九十]+{delimiter}($|\s)"
+            pattern = get_delimiter_pattern(delimiter)
             x = re.search(pattern, line)
             if x:
                 new_chapter = True
                 break
 
-        if new_chapter and contents:
-            generate_chapter(chapter_text=contents, chapter_name=chapter_structure,
-                             last_special_delimiter=last_special_delimiter, generate=generate)
-            last_special_delimiter = False
-            contents = []
+        if new_chapter:
+            if contents:
+                generate_chapter(chapter_text=contents, chapter_name=chapter_structure,
+                                 last_special_delimiter=last_special_delimiter, generate=generate)
+                last_special_delimiter = False
+                contents = []
 
             for idx, delimiter in enumerate(book_delimiter):
-                pattern = f"(^|\s)第[零一二三四五六七八九十]+{delimiter}($|\s)"
+                pattern = get_delimiter_pattern(delimiter)
                 x = re.search(pattern, line)
                 if x:
                     matched_chapter_name = x.group()
                     chapter_structure[idx + 1] = matched_chapter_name
+                    # NOTE: 前提是先卷，后章
                     empty_structure(chapter_structure, start=idx + 2)
         else:
             contents.append(line)
