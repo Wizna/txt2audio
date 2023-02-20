@@ -105,6 +105,7 @@ def get_delimiter_pattern(delimiter):
 
 def construct_text_and_name(raw_data, book_name: str, generate=True):
     table_of_contents = {}
+    contents_of_chapter = {}
     toc_index = 0
     chapter_structure = [book_name] + ['' for _ in book_delimiter] + ['']
     contents = []
@@ -139,6 +140,7 @@ def construct_text_and_name(raw_data, book_name: str, generate=True):
                                                 last_special_delimiter=last_special_delimiter, generate=generate)
                 if chapter_name:
                     table_of_contents[toc_index] = chapter_name
+                    contents_of_chapter[toc_index] = contents
                     toc_index += 1
                 last_special_delimiter = False
                 contents = []
@@ -162,17 +164,22 @@ def construct_text_and_name(raw_data, book_name: str, generate=True):
                                         last_special_delimiter=last_special_delimiter, generate=generate)
         if chapter_name:
             table_of_contents[toc_index] = chapter_name
+            contents_of_chapter[toc_index] = contents
             toc_index += 1
 
     if not generate:
         toc_file_path = f'{os.path.dirname(__file__)}/../output/{book_name}/目录.txt'
         save_table_of_contents(file_path=toc_file_path, table_of_contents=table_of_contents)
 
+    return table_of_contents, contents_of_chapter
+
 
 def save_table_of_contents(file_path, table_of_contents: Dict):
     with open(file_path, 'w+') as f:
         for k, v in table_of_contents.items():
-            f.write(f'{k:>5}:{v} \n')
+            w = f'{k:>5}:{v} \n'
+            print(w)
+            f.write(w)
 
 
 def audio_enhancement(wav):
@@ -187,7 +194,19 @@ def process():
     book_name = os.path.basename(book_file_path[0]).split('.')[0]
     print(f'=========== start processing {book_name} =============')
     raw_data = load_txt_file(book_file_path[0])
-    construct_text_and_name(raw_data=raw_data, book_name=book_name, generate=False)
+    toc, contents = construct_text_and_name(raw_data=raw_data, book_name=book_name, generate=False)
+
+    span = ask_for_output_range(total=max(toc.keys()))
+    for idx in span:
+        if idx not in toc:
+            break
+        output_path = f'{os.path.dirname(__file__)}/../output/{toc[idx]}.wav'
+
+        if os.path.isfile(output_path):
+            print(f"{output_path} is already generated !")
+            continue
+        Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
+        generate_audio_clip(contents[idx], output_path=output_path)
     # construct_text_and_name(raw_data=raw_data, book_name=book_name, generate=True)
 
 
@@ -197,5 +216,20 @@ def parse_arguments():
                         help='path to the text book (absolute or relative)')
 
     args = parser.parse_args()
-    print(args)
     return args.input_file_path
+
+
+def ask_for_output_range(total):
+    var = input("请输入转换范围, (all 表示全部): \n")
+    if len(var) == 0 or var == 'all':
+        return range(total)
+    else:
+        indices = re.split('~|-', var)
+        assert len(indices) in (1, 2), "请输入单个数字或者一个范围, e.g. 8 or 11~18"
+        if len(indices) == 1:
+            s = int(indices[0])
+            return range(s, s + 1)
+        else:
+            s = int(indices[0])
+            e = int(indices[1])
+            return range(s, e + 1)
