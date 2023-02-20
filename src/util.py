@@ -1,7 +1,8 @@
-from typing import List
+from typing import List, Dict
 import io
 from contextlib import redirect_stdout
 import unicodedata
+import argparse
 
 from TTS.api import TTS
 from charset_normalizer import from_path, from_bytes
@@ -48,7 +49,6 @@ def generate_audio_clip(text: List, output_path: str, sample_rate=22050):
 
 
 def mask_punctuations(text):
-    # text = text.replace('“', '"').replace('”', '"')
     text = re.sub(r'[…]+', '。', text)
     text = text.replace('·', '')
     text = re.sub(r'[=]+', '。', text)
@@ -71,10 +71,11 @@ def generate_chapter(chapter_text: List, chapter_name, last_special_delimiter, g
     if combined_name == chapter_name[0]:
         # have not started of the book
         return
-    output_path = f'../output/{combined_name}.wav'
-    print(output_path)
+
+    output_path = f'{os.path.dirname(__file__)}/../output/{combined_name}.wav'
+    # print(output_path)
     if not generate:
-        return
+        return combined_name
     Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
     generate_audio_clip(chapter_text, output_path=output_path)
 
@@ -95,19 +96,18 @@ def empty_structure(chapter_structure, start):
 
 
 def get_delimiter_pattern(delimiter):
-    # f"(^|\s)第[零一二三四五六七八九十]+{delimiter}($|\s)"
     return f"(^|\s)第[零一二三四五六七八九十]+{delimiter}($|\s)"
 
 
 def construct_text_and_name(raw_data, book_name: str, generate=True):
+    table_of_contents = {}
+    toc_index = 0
     chapter_structure = [book_name] + ['' for _ in book_delimiter] + ['']
     contents = []
     input_text_lines = re.split('\r\n|\n', raw_data)
     last_special_delimiter = False
 
     for line in input_text_lines:
-        # line = unicodedata.normalize('NFKC', line)
-
         line = line.strip()
 
         if not line:
@@ -131,8 +131,11 @@ def construct_text_and_name(raw_data, book_name: str, generate=True):
 
         if new_chapter:
             if contents:
-                generate_chapter(chapter_text=contents, chapter_name=chapter_structure,
-                                 last_special_delimiter=last_special_delimiter, generate=generate)
+                chapter_name = generate_chapter(chapter_text=contents, chapter_name=chapter_structure,
+                                                last_special_delimiter=last_special_delimiter, generate=generate)
+                if chapter_name:
+                    table_of_contents[toc_index] = chapter_name
+                    toc_index += 1
                 last_special_delimiter = False
                 contents = []
 
@@ -151,8 +154,21 @@ def construct_text_and_name(raw_data, book_name: str, generate=True):
             last_special_delimiter = True
 
     if contents:
-        generate_chapter(chapter_text=contents, chapter_name=chapter_structure,
-                         last_special_delimiter=last_special_delimiter, generate=generate)
+        chapter_name = generate_chapter(chapter_text=contents, chapter_name=chapter_structure,
+                                        last_special_delimiter=last_special_delimiter, generate=generate)
+        if chapter_name:
+            table_of_contents[toc_index] = chapter_name
+            toc_index += 1
+
+    if not generate:
+        toc_file_path = f'{os.path.dirname(__file__)}/../output/{book_name}/目录.txt'
+        save_table_of_contents(file_path=toc_file_path, table_of_contents=table_of_contents)
+
+
+def save_table_of_contents(file_path, table_of_contents: Dict):
+    with open(file_path, 'w+') as f:
+        for k, v in table_of_contents.items():
+            f.write(f'{k:>5}:{v} \n')
 
 
 def audio_enhancement(wav):
@@ -161,8 +177,21 @@ def audio_enhancement(wav):
     return enhanced_wav
 
 
-def process(book_file_path):
-    book_name = os.path.basename(book_file_path).split('.')[0]
+def process():
+    book_file_path = parse_arguments()
+    assert len(book_file_path) == 1 and '.' in book_file_path[0], "输入一个文件路径，且必须包含文件后缀"
+    book_name = os.path.basename(book_file_path[0]).split('.')[0]
     print(f'=========== start processing {book_name} =============')
-    raw_data = load_txt_file(book_file_path)
+    raw_data = load_txt_file(book_file_path[0])
     construct_text_and_name(raw_data=raw_data, book_name=book_name, generate=False)
+    # construct_text_and_name(raw_data=raw_data, book_name=book_name, generate=True)
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Read a text book and transform to an audio book.')
+    parser.add_argument('input_file_path', metavar='input_file_path', type=str, nargs=1,
+                        help='path to the text book (absolute or relative)')
+
+    args = parser.parse_args()
+    print(args)
+    return args.input_file_path
