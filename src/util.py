@@ -68,14 +68,18 @@ def generate_chapter(chapter_text: List, chapter_name, last_special_delimiter, g
     else:
         combined_name = '/'.join([i for i in chapter_name[:-1] if i])
 
+    if not generate:
+        return combined_name
+
     if combined_name == chapter_name[0]:
         # have not started of the book
         return
 
     output_path = f'{os.path.dirname(__file__)}/../output/{combined_name}.wav'
-    # print(output_path)
-    if not generate:
-        return combined_name
+
+    if os.path.isfile(output_path):
+        print(f"{output_path} is already generated !")
+        return
     Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
     generate_audio_clip(chapter_text, output_path=output_path)
 
