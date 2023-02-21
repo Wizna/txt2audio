@@ -62,26 +62,13 @@ def mask_punctuations(text):
     return text
 
 
-def generate_chapter(chapter_text: List, chapter_name, last_special_delimiter, generate=True):
+def generate_chapter(chapter_text: List, chapter_name, last_special_delimiter):
     if last_special_delimiter:
         combined_name = '/'.join([i for i in chapter_name if i])
     else:
         combined_name = '/'.join([i for i in chapter_name[:-1] if i])
 
-    if not generate:
-        return combined_name
-
-    if combined_name == chapter_name[0]:
-        # have not started of the book
-        return
-
-    output_path = f'{os.path.dirname(__file__)}/../output/{combined_name}.wav'
-
-    if os.path.isfile(output_path):
-        print(f"{output_path} is already generated !")
-        return
-    Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
-    generate_audio_clip(chapter_text, output_path=output_path)
+    return combined_name
 
 
 def check_special_delimiter(text):
@@ -103,7 +90,7 @@ def get_delimiter_pattern(delimiter):
     return f"(^|\s)第[零一二三四五六七八九十]+{delimiter}($|\s)"
 
 
-def construct_text_and_name(raw_data, book_name: str, generate=True):
+def construct_text_and_name(raw_data, book_name: str):
     table_of_contents = {}
     contents_of_chapter = {}
     toc_index = 0
@@ -137,7 +124,7 @@ def construct_text_and_name(raw_data, book_name: str, generate=True):
         if new_chapter:
             if contents:
                 chapter_name = generate_chapter(chapter_text=contents, chapter_name=chapter_structure,
-                                                last_special_delimiter=last_special_delimiter, generate=generate)
+                                                last_special_delimiter=last_special_delimiter)
                 if chapter_name:
                     table_of_contents[toc_index] = chapter_name
                     contents_of_chapter[toc_index] = contents
@@ -161,15 +148,14 @@ def construct_text_and_name(raw_data, book_name: str, generate=True):
 
     if contents:
         chapter_name = generate_chapter(chapter_text=contents, chapter_name=chapter_structure,
-                                        last_special_delimiter=last_special_delimiter, generate=generate)
+                                        last_special_delimiter=last_special_delimiter)
         if chapter_name:
             table_of_contents[toc_index] = chapter_name
             contents_of_chapter[toc_index] = contents
             toc_index += 1
 
-    if not generate:
-        toc_file_path = f'{os.path.dirname(__file__)}/../output/{book_name}/目录.txt'
-        save_table_of_contents(file_path=toc_file_path, table_of_contents=table_of_contents)
+    toc_file_path = f'{os.path.dirname(__file__)}/../output/{book_name}/目录.txt'
+    save_table_of_contents(file_path=toc_file_path, table_of_contents=table_of_contents)
 
     return table_of_contents, contents_of_chapter
 
@@ -194,7 +180,7 @@ def process():
     book_name = os.path.basename(book_file_path[0]).split('.')[0]
     print(f'=========== start processing {book_name} =============')
     raw_data = load_txt_file(book_file_path[0])
-    toc, contents = construct_text_and_name(raw_data=raw_data, book_name=book_name, generate=False)
+    toc, contents = construct_text_and_name(raw_data=raw_data, book_name=book_name)
 
     span = ask_for_output_range(total=max(toc.keys()))
     for idx in span:
