@@ -42,9 +42,12 @@ def create_image_from_text(para, max_w=720, max_h=1280):
             d.text(((max_w - w) / 2, current_h), line, font=selected_font)
             current_h += h + pad
 
-    img.save(f'{os.path.dirname(para)}/cover.png')
+    result = f'{os.path.dirname(para)}/cover.png'
+    img.save(result)
+    return result
 
 
-def transform_wav_to_video(audio, image, output_video):
+def transform_wav_to_video(audio):
+    image = create_image_from_text(audio)
     command_line = 'ffmpeg -y -r 1 -loop 1 -i pil_text_font.png -i 楔子.wav -acodec copy -r 1 -shortest -vf scale=720:1280 ep1.flv'
     subprocess.run(shlex.split(command_line))
