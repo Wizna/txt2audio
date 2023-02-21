@@ -1,14 +1,12 @@
 from typing import List, Dict
 import io
 from contextlib import redirect_stdout
-import unicodedata
 import argparse
 
 from TTS.api import TTS
-from charset_normalizer import from_path, from_bytes
+from charset_normalizer import from_path
 import re
 import os
-from tqdm import tqdm
 from pathlib import Path
 import numpy as np
 from scipy.io.wavfile import write
