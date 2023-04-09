@@ -11,6 +11,7 @@ from pathlib import Path
 import numpy as np
 from scipy.io.wavfile import write
 from logmmse import logmmse
+from video import transform_wav_to_video
 
 model_name = 'tts_models/zh-CN/baker/tacotron2-DDC-GST'
 tts = TTS(model_name=model_name, progress_bar=True, gpu=False)
@@ -191,6 +192,7 @@ def process():
             continue
         Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
         generate_audio_clip(contents[idx], output_path=output_path)
+        transform_wav_to_video(number=idx, audio=output_path)
     # construct_text_and_name(raw_data=raw_data, book_name=book_name, generate=True)
 
 
