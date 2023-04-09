@@ -51,7 +51,7 @@ def create_image_from_text(number, toc, audio, max_w=720, max_h=1280):
 
     number_font = ImageFont.truetype("/Users/huangruiming/workspace/txt2audio/resources/DTM-Mono-1.otf", 40)
     w, h = d.textsize(f'{number}', font=number_font)
-    draw_underlined_text(d, ((max_w - w) / 2, max_h - 100), f'{number}', font=number_font)
+    draw_underlined_text(d, ((max_w - w) / 2, max_h - 240), f'{number}', font=number_font)
 
     result = f'{os.path.dirname(audio)}/cover.jpg'
     img.save(result)
