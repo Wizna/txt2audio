@@ -212,7 +212,7 @@ def ask_for_output_range(total):
         return range(total)
     else:
         indices = re.split('~|-', var)
-        assert len(indices) in (1, 2), "请输入单个数字或者一个范围, e.g. 8 or 11~18"
+        assert len(indices) in (1, 2), "请输入单个数字或者一个范围, e.g. 8 or 0~8"
         if len(indices) == 1:
             s = int(indices[0])
             return range(s, s + 1)
