@@ -160,6 +160,7 @@ def construct_text_and_name(raw_data, book_name: str):
 
 
 def save_table_of_contents(file_path, table_of_contents: Dict):
+    Path(os.path.dirname(file_path)).mkdir(parents=True, exist_ok=True)
     with open(file_path, 'w+') as f:
         for k, v in table_of_contents.items():
             w = f'{k:>5}:{v} \n'
@@ -192,7 +193,7 @@ def process():
             continue
         Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
         generate_audio_clip(contents[idx], output_path=output_path)
-        transform_wav_to_video(number=idx, audio=output_path)
+        transform_wav_to_video(number=idx, audio=output_path, toc=toc[idx])
     # construct_text_and_name(raw_data=raw_data, book_name=book_name, generate=True)
 
 
