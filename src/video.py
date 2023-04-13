@@ -61,6 +61,8 @@ def create_image_from_text(number, toc, audio, max_w=720, max_h=1280):
 def transform_wav_to_video(number, audio, toc):
     image = create_image_from_text(number=number, toc=toc, audio=audio)
     video_path = audio.replace('wav', 'mp4')
-    command_line = f'ffmpeg -loop 1 -i {image} -i {audio} -c:v libx264 -tune stillimage -c:a aac -b:a 192k -pix_fmt yuv420p -shortest {video_path}'
+    command_line = f'ffmpeg -loop 1 -i {image} -i {audio} -c:v libx264 -tune stillimage -c:a aac -b:a 192k -pix_fmt yuv420p -shortest {video_path} && rm -f {audio}'
     print(f'the conversion command:\n {command_line}')
-    subprocess.run(shlex.split(command_line))
+    # subprocess.run(shlex.split(command_line))
+    ret = subprocess.run(command_line, capture_output=True, shell=True)
+    print(ret.stdout.decode())
