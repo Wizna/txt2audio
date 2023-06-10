@@ -10,3 +10,5 @@ NOTE:
 
 - max_decoder_steps 还一个比较常见的原因，是"，"这种结尾，导致没有正确停止
 
+- 运行有问题先看 python 库的配置 `pip3 install -r requirements.txt` 
+
