@@ -1,6 +1,6 @@
 # txt2audio
 
-transform txt book to audio book
+> Transform txt book to audio book 将网络小说转换成有声书（主要是为了保护我的眼睛）
 
 USAGE:
 
@@ -16,4 +16,7 @@ NOTE:
   - 还一个比较常见的原因，是"，"这种结尾，导致没有正确停止
 
 - 运行有问题先看 python 库的配置 `pip3 install -r requirements.txt`
+
+TODO:
+- [ ] 模型迁移为 faireseq - transformer
 
