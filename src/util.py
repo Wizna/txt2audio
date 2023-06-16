@@ -12,6 +12,7 @@ import numpy as np
 from scipy.io.wavfile import write
 from logmmse import logmmse
 from video import transform_wav_to_video
+from fairseq_transformer import generate_wav
 
 model_name = 'tts_models/zh-CN/baker/tacotron2-DDC-GST'
 tts = TTS(model_name=model_name, progress_bar=True, gpu=False)
@@ -40,6 +41,9 @@ def generate_audio_clip(text: List, output_path: str, sample_rate=22050):
     audio_clip = []
     for sub_text in text:
         sentences = mask_punctuations(text=sub_text)
+        # # fairseq model
+        # print(f'processing: {sentences}')
+        # wav = generate_wav(text=sentences)
         wav = tts.tts(text=sentences)
         audio_clip.extend(wav)
 
