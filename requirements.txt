@@ -1,7 +1,10 @@
-charset_normalizer==2.0.9
 logmmse==1.5
-numpy==1.19.4
+numpy~=1.21.6
 Pillow==8.4.0
 scipy==1.9.3
 trainer==0.0.20
 TTS==0.13.0
+
+pkuseg~=0.0.25
+ipython~=8.12.0
+fairseq~=0.12.2
