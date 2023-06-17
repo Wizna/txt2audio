@@ -13,6 +13,7 @@ from scipy.io.wavfile import write
 from logmmse import logmmse
 from video import transform_wav_to_video
 from fairseq_transformer import generate_wav
+from bark_util import generate_wav_for_long_form
 
 model_name = 'tts_models/zh-CN/baker/tacotron2-DDC-GST'
 tts = TTS(model_name=model_name, progress_bar=True, gpu=False)
@@ -44,7 +45,10 @@ def generate_audio_clip(text: List, output_path: str, sample_rate=22050):
         # # fairseq model
         # print(f'processing: {sentences}')
         # wav = generate_wav(text=sentences)
-        wav = tts.tts(text=sentences)
+
+        # wav = tts.tts(text=sentences)
+
+        wav = generate_wav_for_long_form(raw_sentence=sentences)
         audio_clip.extend(wav)
 
     final_result = audio_enhancement(audio_clip)
