@@ -13,7 +13,7 @@ from bark.api import semantic_to_waveform
 from bark import generate_audio, SAMPLE_RATE
 
 preload_models()
-seg = pkuseg.pkuseg(user_dict='../resources/novel_dict.txt')
+seg = pkuseg.pkuseg(user_dict='/Users/huangruiming/workspace/txt2audio/resources/novel_dict.txt')
 
 GEN_TEMP = 0.6
 SPEAKER = "v2/zh_speaker_8"
