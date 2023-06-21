@@ -1,9 +1,9 @@
 import sys
-from util import process
+from utility import cli_main_process
 
 
 def main() -> int:
-    process()
+    cli_main_process()
     return 0
 
 

@@ -3,7 +3,7 @@ import io
 from contextlib import redirect_stdout
 import argparse
 
-from TTS.api import TTS
+# from TTS.api import TTS
 from charset_normalizer import from_path
 import re
 import os
@@ -12,11 +12,11 @@ import numpy as np
 from scipy.io.wavfile import write
 from logmmse import logmmse
 from video import transform_wav_to_video
-from fairseq_transformer import generate_wav
+# from fairseq_transformer import generate_wav
 from bark_util import generate_wav_for_long_form
 
 model_name = 'tts_models/zh-CN/baker/tacotron2-DDC-GST'
-tts = TTS(model_name=model_name, progress_bar=True, gpu=False)
+# tts = TTS(model_name=model_name, progress_bar=True, gpu=False)
 
 book_delimiter = '卷章'
 
@@ -182,7 +182,7 @@ def audio_enhancement(wav):
     return enhanced_wav
 
 
-def process():
+def cli_main_process():
     book_file_path = parse_arguments()
     assert len(book_file_path) == 1 and '.' in book_file_path[0], "输入一个文件路径，且必须包含文件后缀"
     book_name = os.path.basename(book_file_path[0]).split('.')[0]

@@ -1,5 +1,6 @@
 import os
 import pkuseg
+import importlib.resources
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
@@ -13,7 +14,9 @@ from bark.api import semantic_to_waveform
 from bark import generate_audio, SAMPLE_RATE
 
 preload_models()
-seg = pkuseg.pkuseg(user_dict='/Users/huangruiming/workspace/txt2audio/resources/novel_dict.txt')
+with importlib.resources.path('txt2audio.resources', 'novel_dict.txt') as user_dict_path:
+    print(f'use user dictionary at {user_dict_path}')
+    seg = pkuseg.pkuseg(user_dict=str(user_dict_path))
 
 GEN_TEMP = 0.6
 SPEAKER = "v2/zh_speaker_8"
