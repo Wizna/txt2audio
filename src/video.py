@@ -4,6 +4,7 @@ from PIL import Image, ImageDraw, ImageFont
 import hashlib
 import re
 import os
+import importlib.resources
 
 
 def draw_underlined_text(draw, pos, text, font, **options):
@@ -27,12 +28,18 @@ def create_image_from_text(number, toc, audio, max_w=720, max_h=1280):
     r, g, b = get_color_from_text(s=toc.split('/')[0])
     img = Image.new('RGB', (max_w, max_h), color=(r, g, b))
 
-    font = ImageFont.truetype(
-        '/Users/huangruiming/workspace/txt2audio/resources/YunFengFeiYunTi-2.ttf',
-        80)
-    smaller_font = ImageFont.truetype(
-        '/Users/huangruiming/workspace/txt2audio/resources/YangRenDongZhuShiTi-Extralight-2.ttf',
-        70)
+    with importlib.resources.path('txt2audio.resources', 'YunFengFeiYunTi-2.ttf') as font_path, \
+            importlib.resources.path('txt2audio.resources',
+                                     'YangRenDongZhuShiTi-Extralight-2.ttf') as smaller_font_path, \
+            importlib.resources.path('txt2audio.resources', 'DTM-Mono-1.otf') as number_font_path:
+        font = ImageFont.truetype(
+            str(font_path),
+            80)
+        smaller_font = ImageFont.truetype(
+            str(smaller_font_path),
+            70)
+        number_font = ImageFont.truetype(str(number_font_path), 40)
+
     d = ImageDraw.Draw(img)
 
     current_h, pad = 200, 40
@@ -49,7 +56,6 @@ def create_image_from_text(number, toc, audio, max_w=720, max_h=1280):
             d.text(((max_w - w) / 2, current_h), line, font=selected_font)
             current_h += h + pad
 
-    number_font = ImageFont.truetype("/Users/huangruiming/workspace/txt2audio/resources/DTM-Mono-1.otf", 40)
     w, h = d.textsize(f'{number}', font=number_font)
     draw_underlined_text(d, ((max_w - w) / 2, max_h - 300), f'{number}', font=number_font)
 
