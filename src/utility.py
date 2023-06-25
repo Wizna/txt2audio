@@ -40,16 +40,16 @@ def load_txt_file(file_path):
 
 def generate_audio_clip(text: List, output_path: str, sample_rate=22050):
     audio_clip = []
-    for sub_text in text:
-        sentences = mask_punctuations(text=sub_text)
+    # for sub_text in text:
+    #     sentences = mask_punctuations(text=sub_text)
         # # fairseq model
         # print(f'processing: {sentences}')
         # wav = generate_wav(text=sentences)
 
         # wav = tts.tts(text=sentences)
 
-        wav = generate_wav_for_long_form(raw_sentence=sentences)
-        audio_clip.extend(wav)
+    wav = generate_wav_for_long_form(raw_sentence='\n'.join(text))
+    audio_clip.extend(wav)
 
     final_result = audio_enhancement(audio_clip)
     write(output_path, sample_rate, final_result)
