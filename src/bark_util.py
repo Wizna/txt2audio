@@ -20,7 +20,7 @@ seg = pkuseg.pkuseg(model_name="/content/default_v2", user_dict=f'{os.path.dirna
 
 GEN_TEMP = 0.6
 SPEAKER = "v2/zh_speaker_8"
-silence = np.zeros(int(0.25 * SAMPLE_RATE))  # quarter second of silence
+silence = np.zeros(int(0.15 * SAMPLE_RATE))  # quarter second of silence
 
 
 def generate_wav_for_long_form(raw_sentence):
