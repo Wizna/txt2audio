@@ -3,7 +3,7 @@ import io
 from contextlib import redirect_stdout
 import argparse
 
-# from TTS.api import TTS
+from TTS.api import TTS
 from charset_normalizer import from_path
 import re
 import os
@@ -16,7 +16,7 @@ from video import transform_wav_to_video
 from bark_util import generate_wav_for_long_form
 
 model_name = 'tts_models/zh-CN/baker/tacotron2-DDC-GST'
-# tts = TTS(model_name=model_name, progress_bar=True, gpu=False)
+tts = TTS(model_name=model_name, progress_bar=True, gpu=False)
 
 book_delimiter = '卷章'
 
@@ -39,19 +39,19 @@ def load_txt_file(file_path):
 
 
 def generate_audio_clip(text: List, output_path: str, sample_rate=22050):
-    audio_clip = []
-    # for sub_text in text:
-    #     sentences = mask_punctuations(text=sub_text)
+    wav = []
+    for sub_text in text:
+        sentences = mask_punctuations(text=sub_text)
         # # fairseq model
         # print(f'processing: {sentences}')
-        # wav = generate_wav(text=sentences)
+        # wav.extend(generate_wav(text=sentences))
 
-        # wav = tts.tts(text=sentences)
+        wav.extend(tts.tts(text=sentences))
 
-    wav = generate_wav_for_long_form(raw_sentence=' '.join(text))
-    audio_clip.extend(wav)
+    # # Bark version
+    # wav = generate_wav_for_long_form(raw_sentence=' '.join(text))
 
-    final_result = audio_enhancement(audio_clip)
+    final_result = audio_enhancement(wav)
     write(output_path, sample_rate, final_result)
 
 
