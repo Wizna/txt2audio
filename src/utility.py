@@ -48,7 +48,7 @@ def generate_audio_clip(text: List, output_path: str, sample_rate=22050):
 
         # wav = tts.tts(text=sentences)
 
-    wav = generate_wav_for_long_form(raw_sentence='\n'.join(text))
+    wav = generate_wav_for_long_form(raw_sentence=' '.join(text))
     audio_clip.extend(wav)
 
     final_result = audio_enhancement(audio_clip)
