@@ -1,5 +1,5 @@
 import os
-import pkuseg
+# import pkuseg
 import importlib.resources
 
 CHINESE_PUNCTUATIONS = '，。”“～·；：？/《》*&…%¥#@！【】：’‘…、（）「」–⸺ '
@@ -18,8 +18,8 @@ from bark import generate_audio, SAMPLE_RATE
 preload_models()
 # with importlib.resources.path('txt2audio.resources', 'novel_dict.txt') as user_dict_path:
 #     print(f'use user dictionary at {user_dict_path}')
-seg = pkuseg.pkuseg(model_name="/content/default_v2",
-                    user_dict=f'{os.path.dirname(__file__)}/../resources/novel_dict.txt')
+# seg = pkuseg.pkuseg(model_name="/content/default_v2",
+#                     user_dict=f'{os.path.dirname(__file__)}/../resources/novel_dict.txt')
 
 GEN_TEMP = 0.76
 SPEAKER = "v2/zh_speaker_8"
