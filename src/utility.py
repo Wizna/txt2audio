@@ -195,8 +195,9 @@ def cli_main_process():
         if idx not in toc:
             break
         output_path = f'{os.path.dirname(__file__)}/../output/{toc[idx]}.wav'
+        output_video_path = f'{os.path.dirname(__file__)}/../output/{toc[idx]}.mp4'
 
-        if os.path.isfile(output_path):
+        if os.path.isfile(output_path) or os.path.isfile(output_video_path):
             print(f"{output_path} is already generated !")
             continue
         Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
