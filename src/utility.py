@@ -80,7 +80,7 @@ def generate_chapter(chapter_text: List, chapter_name, last_special_delimiter):
 
 def check_special_delimiter(text):
     for sub_text in text.split(' '):
-        for p in ['序', '序章', '序言', '前言', '楔子', '引言', '后记']:
+        for p in ['序', '序章', '序言', '前言', '楔子', '引言', '后记', '终章']:
             if p == sub_text:
                 return p
 
@@ -94,7 +94,7 @@ def empty_structure(chapter_structure, start):
 
 
 def get_delimiter_pattern(delimiter):
-    return f"(^|\s)第[零一二三四五六七八九十]+{delimiter}($|\s)"
+    return f"(^|\s)(第[零一二三四五六七八九十]+{delimiter}|{delimiter}[零一二三四五六七八九十]+)($|\s)"
 
 
 def construct_text_and_name(raw_data, book_name: str):
