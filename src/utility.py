@@ -52,7 +52,7 @@ def generate_audio_clip(text: List, output_path: str, sample_rate=22050):
     # # Bark version
     # wav = generate_wav_for_long_form(raw_sentence=' '.join(text))
 
-    final_result = audio_enhancement(wav)
+    final_result = audio_enhancement(wav, sample_rate)
     write(output_path, sample_rate, final_result)
 
 
@@ -181,8 +181,8 @@ def save_table_of_contents(file_path, table_of_contents: Dict):
             f.write(w)
 
 
-def audio_enhancement(wav):
-    enhanced_wav = logmmse(np.array(wav, dtype=np.float32), 22050, output_file=None,
+def audio_enhancement(wav, sample_rate):
+    enhanced_wav = logmmse(np.array(wav, dtype=np.float32), sample_rate, output_file=None,
                            initial_noise=1, window_size=160, noise_threshold=0.15)
     return enhanced_wav
 
@@ -206,7 +206,8 @@ def cli_main_process():
             print(f"{output_path} is already generated !")
             continue
         Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
-        generate_audio_clip(contents[idx], output_path=output_path)
+        # 22050 * 1.24 = 27342
+        generate_audio_clip(contents[idx], output_path=output_path, sample_rate=27342)
         transform_wav_to_video(number=idx, audio=output_path, toc=toc[idx])
     # construct_text_and_name(raw_data=raw_data, book_name=book_name, generate=True)
 
