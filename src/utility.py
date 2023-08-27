@@ -55,7 +55,7 @@ def generate_audio_clip(text: List, output_path: str, sample_rate=22050):
     # wav = generate_wav_for_long_form(raw_sentence=' '.join(text))
 
     final_result = audio_enhancement(wav, sample_rate)
-    stretched_audio = librosa.effects.time_stretch(final_result, 1.25)
+    stretched_audio = librosa.effects.time_stretch(final_result, 1.24)
     write(output_path, sample_rate, stretched_audio)
 
 
