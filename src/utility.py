@@ -60,6 +60,7 @@ def generate_audio_clip(text: List, output_path: str, sample_rate=22050):
 
 
 def mask_punctuations(text):
+    text = re.sub(r"([！？=@。])+", r"\1", text)
     text = re.sub(r"([！@=…？])\1+", r"\1", text)
     text = re.sub(r'[…]+', '。', text)
     text = text.replace('·', '').replace('※', '')
