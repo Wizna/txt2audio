@@ -54,9 +54,9 @@ def generate_audio_clip(text: List, output_path: str, sample_rate=22050):
     # # Bark version
     # wav = generate_wav_for_long_form(raw_sentence=' '.join(text))
 
-    final_result = audio_enhancement(wav, sample_rate)
-    stretched_audio = librosa.effects.time_stretch(final_result, 1.24)
-    write(output_path, sample_rate, stretched_audio)
+    stretched_audio = librosa.effects.time_stretch(wav, 1.24)
+    final_result = audio_enhancement(stretched_audio, sample_rate)
+    write(output_path, sample_rate, final_result)
 
 
 def mask_punctuations(text):
@@ -185,8 +185,7 @@ def save_table_of_contents(file_path, table_of_contents: Dict):
 
 
 def audio_enhancement(wav, sample_rate):
-    enhanced_wav = logmmse(np.array(wav, dtype=np.float32), sample_rate, output_file=None,
-                           initial_noise=1, window_size=160, noise_threshold=0.15)
+    enhanced_wav = logmmse(np.array(wav, dtype=np.float32), sample_rate)
     return enhanced_wav
 
 
