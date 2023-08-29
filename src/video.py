@@ -8,7 +8,10 @@ import importlib.resources
 
 
 def draw_underlined_text(draw, pos, text, font, **options):
-    text_width, text_height = draw.textsize(text, font=font)
+    (left, top, right, bottom) = draw.textbbox(xy=(0, 0), text=text, font=font)
+
+    text_width = right - left
+    text_height = bottom - top
     lx, ly = pos[0], pos[1] + text_height + 8
     draw.text(pos, text, font=font, **options)
     draw.line((lx, ly, lx + text_width, ly), width=4, **options)
@@ -52,11 +55,15 @@ def create_image_from_text(number, toc, audio, max_w=720, max_h=1280):
                 continue
 
             selected_font = font if idx == 0 else smaller_font
-            w, h = d.textsize(line, font=selected_font)
+            (left, top, right, bottom) = d.textbbox(xy=(0, 0), text=line, font=selected_font)
+            w = right - left
+            h = bottom - top
             d.text(((max_w - w) / 2, current_h), line, font=selected_font)
             current_h += h + pad
 
-    w, h = d.textsize(f'{number}', font=number_font)
+    (left, top, right, bottom) = d.textbbox(xy=(0, 0), text=f'{number}', font=number_font)
+    w = right - left
+    h = bottom - top
     draw_underlined_text(d, ((max_w - w) / 2, max_h - 300), f'{number}', font=number_font)
 
     result = f'{os.path.dirname(audio)}/cover.jpg'
