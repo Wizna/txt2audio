@@ -205,12 +205,14 @@ def cli_main_process():
         output_path = f'{os.path.dirname(__file__)}/../output/{toc[idx]}.wav'
         output_video_path = f'{os.path.dirname(__file__)}/../output/{toc[idx]}.mp4'
 
-        if os.path.isfile(output_path) or os.path.isfile(output_video_path):
-            print(f"{output_path} is already generated !")
+        if os.path.isfile(output_video_path):
+            print(f"{output_video_path} is already generated !")
             continue
+
         Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
-        # 22050 * 1.24 = 27342
-        generate_audio_clip(contents[idx], output_path=output_path, sample_rate=22050)
+        if not os.path.isfile(output_path):
+            generate_audio_clip(contents[idx], output_path=output_path, sample_rate=22050)
+
         transform_wav_to_video(number=idx, audio=output_path, toc=toc[idx])
     # construct_text_and_name(raw_data=raw_data, book_name=book_name, generate=True)
 
