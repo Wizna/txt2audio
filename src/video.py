@@ -12,7 +12,7 @@ def draw_underlined_text(draw, pos, text, font, **options):
 
     text_width = right - left
     text_height = bottom - top
-    lx, ly = pos[0], pos[1] + text_height + 8
+    lx, ly = pos[0], pos[1] + text_height + 20
     draw.text(pos, text, font=font, **options)
     draw.line((lx, ly, lx + text_width, ly), width=4, **options)
 
