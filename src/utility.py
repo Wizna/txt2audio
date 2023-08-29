@@ -54,7 +54,7 @@ def generate_audio_clip(text: List, output_path: str, sample_rate=22050):
     # # Bark version
     # wav = generate_wav_for_long_form(raw_sentence=' '.join(text))
 
-    stretched_audio = librosa.effects.time_stretch(np.array(wav, dtype=np.float32), 1.24)
+    stretched_audio = librosa.effects.time_stretch(y=np.array(wav, dtype=np.float32), rate=1.14, n_fft=512)
     final_result = audio_enhancement(stretched_audio, sample_rate)
     write(output_path, sample_rate, final_result)
 
