@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 import numpy as np
 from scipy.io.wavfile import write
-from logmmse import logmmse
+# from logmmse import logmmse
 from video import transform_wav_to_video
 import librosa
 
@@ -186,8 +186,8 @@ def save_table_of_contents(file_path, table_of_contents: Dict):
 
 
 def audio_enhancement(wav, sample_rate):
-    enhanced_wav = logmmse(wav, sample_rate)
-    return enhanced_wav
+    # enhanced_wav = logmmse(wav, sample_rate)
+    return wav
 
 
 def cli_main_process():
