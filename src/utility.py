@@ -45,7 +45,7 @@ def generate_audio_clip(text: List, output_path: str, sample_rate=22050):
     for sub_text in text:
         sentences = mask_punctuations(text=sub_text)
         if sentences:
-            wav.extend(tts.tts(text=sentences, speed=1.14))
+            wav.extend(tts.tts(text=sentences, speed=1.24))
 
         # # fairseq model
         # print(f'processing: {sentences}')
