@@ -17,7 +17,8 @@ import librosa
 # from fairseq_transformer import generate_wav
 # from bark_util import generate_wav_for_long_form
 
-model_name = 'tts_models/zh-CN/baker/tacotron2-DDC-GST'
+# model_name = 'tts_models/zh-CN/baker/tacotron2-DDC-GST'
+model_name = 'tts_models/multilingual/multi-dataset/xtts_v2'
 tts = TTS(model_name=model_name, progress_bar=True, gpu=False)
 
 book_delimiter = '卷章'
