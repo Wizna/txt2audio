@@ -82,7 +82,7 @@ def mask_punctuations(text):
     return text
 
 
-def split_long_sentences(input_str, model_limit=80):
+def split_long_sentences(input_str, model_limit=40):
     pieces = math.ceil(len(input_str) / model_limit)
     character_for_each_piece = len(input_str) // pieces
     candidates = input_str.split('，')
