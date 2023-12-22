@@ -48,7 +48,7 @@ def generate_audio_clip(text: List, output_path: str, sample_rate=22050):
             # NOTE: model limit is 82
             for processed_sentences in split_long_sentences(sentences):
                 wav.extend(tts.tts(text=processed_sentences, speaker_wav="./resources/female.wav", language="zh-cn",
-                                   speed=1.24))
+                                   speed=1.24, split_sentences=False))
 
         # # fairseq model
         # print(f'processing: {sentences}')
@@ -82,7 +82,7 @@ def mask_punctuations(text):
     return text
 
 
-def split_long_sentences(input_str, model_limit=40):
+def split_long_sentences(input_str, model_limit=30):
     pieces = math.ceil(len(input_str) / model_limit)
     character_for_each_piece = len(input_str) // pieces
     candidates = input_str.split('，')
