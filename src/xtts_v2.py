@@ -4,7 +4,7 @@ tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", gpu=False)
 
 # generate speech by cloning a voice using default settings
 tts.tts_to_file(
-  text="卓凌昭站入厅心，长眉挑起，森然道：“江大人，蒙你赐帖召唤，卓某不敢不来。你若有话交代，赶紧请说吧！”江充嘿嘿一笑，道：“卓掌门别急，咱们喝上一杯，再说不迟。”说着便命人摆下桌椅，便请卓凌昭上座。",
+  text='望着一枚蓝澄澄的铁胆，他细细抚摸，只觉上头似还有着余温。',
   file_path="output.wav",
   speaker_wav="./resources/female.wav",
   language="zh-cn")
