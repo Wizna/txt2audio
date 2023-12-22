@@ -10,9 +10,8 @@ import os
 from pathlib import Path
 import numpy as np
 from scipy.io.wavfile import write
-# from logmmse import logmmse
 from video import transform_wav_to_video
-import librosa
+import math
 
 # from fairseq_transformer import generate_wav
 # from bark_util import generate_wav_for_long_form
@@ -46,8 +45,10 @@ def generate_audio_clip(text: List, output_path: str, sample_rate=22050):
     for sub_text in text:
         sentences = mask_punctuations(text=sub_text)
         if sentences:
-            # NOTE: speed=1.24
-            wav.extend(tts.tts(text=sentences, speaker_wav="./resources/female.wav", language="zh-cn"))
+            # NOTE: model limit is 82
+            for processed_sentences in split_long_sentences(sentences):
+                wav.extend(tts.tts(text=processed_sentences, speaker_wav="./resources/female.wav", language="zh-cn",
+                                   speed=1.24))
 
         # # fairseq model
         # print(f'processing: {sentences}')
@@ -79,6 +80,28 @@ def mask_punctuations(text):
     if re.search(u'[\u4e00-\u9fff]', text[-1]):
         text += '。'
     return text
+
+
+def split_long_sentences(input_str, model_limit=80):
+    pieces = math.ceil(len(input_str) / model_limit)
+    character_for_each_piece = len(input_str) // pieces
+    candidates = input_str.split('，')
+    result = []
+    current_s = []
+    for v in candidates:
+        current_s.append(v)
+        possible = '，'.join(current_s)
+        if len(possible) > character_for_each_piece:
+            if len(current_s) > 1:
+                result.append('，'.join(current_s[:-1]) + '，')
+                current_s = [v]
+            else:
+                result.append(v)
+                current_s = []
+        else:
+            continue
+    result.append('，'.join(current_s))
+    return result
 
 
 def generate_chapter(chapter_text: List, chapter_name, last_special_delimiter):
