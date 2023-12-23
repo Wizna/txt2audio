@@ -100,7 +100,8 @@ def split_long_sentences(input_str, model_limit=30):
                 current_s = []
         else:
             continue
-    result.append('，'.join(current_s))
+    if current_s:
+        result.append('，'.join(current_s))
     return result
 
 
