@@ -12,6 +12,7 @@ import numpy as np
 from scipy.io.wavfile import write
 from video import transform_wav_to_video
 import math
+import librosa
 
 # from fairseq_transformer import generate_wav
 # from bark_util import generate_wav_for_long_form
@@ -57,10 +58,10 @@ def generate_audio_clip(text: List, output_path: str, sample_rate=22050):
     # # Bark version
     # wav = generate_wav_for_long_form(raw_sentence=' '.join(text))
 
-    # stretched_audio = librosa.effects.time_stretch(y=np.array(wav, dtype=np.float32), rate=1.14, n_fft=512)
+    stretched_audio = librosa.effects.time_stretch(y=np.array(wav, dtype=np.float32), rate=1.2, n_fft=512)
     # final_result = audio_enhancement(stretched_audio, sample_rate)
-    final_result = np.array(wav, dtype=np.float32)
-    write(output_path, sample_rate, final_result)
+    # final_result = np.array(wav, dtype=np.float32)
+    write(output_path, sample_rate, stretched_audio)
 
 
 def mask_punctuations(text):
