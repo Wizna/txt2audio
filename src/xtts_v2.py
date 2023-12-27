@@ -10,11 +10,11 @@ tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", gpu=False)
 wav = tts.tts(
   text='望着一枚蓝澄澄的铁胆，他细细抚摸，只觉上头似还有着余温。',
   # file_path=,
-  speaker_wav="./resources/male.wav",
+  speaker_wav="./resources/tts3_Dolbyio_professional.wav",
   language="zh-cn")
 
 stretched_audio = librosa.effects.time_stretch(y=np.array(wav, dtype=np.float32), rate=1.2, n_fft=512)
-write("output_male.wav", 22050, stretched_audio)
+write("output_tts3_Dolbyio_professional.wav", 22050, stretched_audio)
 
 # model_name = 'tts_models/zh-CN/baker/tacotron2-DDC-GST'
 # tts2 = TTS(model_name=model_name, progress_bar=True, gpu=False)
