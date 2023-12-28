@@ -86,23 +86,24 @@ def mask_punctuations(text):
 def split_long_sentences(input_str, model_limit=30):
     pieces = math.ceil(len(input_str) / model_limit)
     character_for_each_piece = len(input_str) // pieces
-    candidates = input_str.split('，')
+    candidates = re.split(r'([，。？！])', input_str)
     result = []
     current_s = []
     for v in candidates:
         current_s.append(v)
-        possible = '，'.join(current_s)
+        if not v or v in '，。？！':
+            continue
+        possible = ''.join(current_s)
         if len(possible) > character_for_each_piece:
             if len(current_s) > 1:
-                result.append('，'.join(current_s[:-1]) + '，')
+                result.append(''.join(current_s[:-1]))
                 current_s = [v]
             else:
                 result.append(v)
                 current_s = []
-        else:
-            continue
+
     if current_s:
-        result.append('，'.join(current_s))
+        result.append(''.join(current_s))
     return result
 
 
