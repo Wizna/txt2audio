@@ -260,7 +260,7 @@ def ask_for_output_range(total):
     if len(var) == 0 or var == 'all':
         return range(total)
     else:
-        indices = re.split('~|-', var)
+        indices = re.split('[~-]', var)
         assert len(indices) in (1, 2), "请输入单个数字或者一个范围, e.g. 8 or 0~8"
         if len(indices) == 1:
             s = int(indices[0])
