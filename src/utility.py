@@ -240,7 +240,7 @@ def cli_main_process():
 
         Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
         if not os.path.isfile(output_path):
-            generate_audio_clip(contents[idx], output_path=output_path, sample_rate=22050)
+            generate_audio_clip(text=[''.join(contents[idx])], output_path=output_path, sample_rate=22050)
 
         transform_wav_to_video(number=idx, audio=output_path, toc=toc[idx])
     # construct_text_and_name(raw_data=raw_data, book_name=book_name, generate=True)
