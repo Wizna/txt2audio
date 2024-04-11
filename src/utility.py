@@ -66,6 +66,10 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=22050):
     if wav:
         stretched_audio = librosa.effects.time_stretch(y=np.array(wav, dtype=np.float32), rate=1.24, n_fft=512)
         write(f'{output_path}-{video_clip_index}', sample_rate, stretched_audio)
+    else:
+        video_clip_index -= 1
+
+    return video_clip_index
 
 
 def mask_punctuations(text):
@@ -232,18 +236,19 @@ def cli_main_process():
     for idx in span:
         if idx not in toc:
             break
-        output_path = f'{os.path.dirname(__file__)}/../output/{toc[idx]}.wav'
+        output_audio_path = f'{os.path.dirname(__file__)}/../output/{toc[idx]}.wav'
         output_video_path = f'{os.path.dirname(__file__)}/../output/{toc[idx]}.mp4'
 
-        if os.path.isfile(output_video_path):
+        if os.path.isfile(output_video_path) or os.path.isfile(output_audio_path):
             print(f"{output_video_path} is already generated !")
             continue
 
-        Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
-        if not os.path.isfile(output_path):
-            generate_audio_clip(text=''.join(contents[idx]), output_path=output_path, sample_rate=22050)
+        Path(os.path.dirname(output_audio_path)).mkdir(parents=True, exist_ok=True)
 
-        transform_wav_to_video(number=idx, audio=output_path, toc=toc[idx])
+        clip_num = generate_audio_clip(text=''.join(contents[idx]), output_path=output_audio_path, sample_rate=22050)
+
+        for i in range(clip_num):
+            transform_wav_to_video(number=idx, audio=f'{output_audio_path}-{i + 1}', toc=toc[idx])
     # construct_text_and_name(raw_data=raw_data, book_name=book_name, generate=True)
 
 
