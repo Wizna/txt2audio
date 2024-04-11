@@ -14,9 +14,8 @@ from video import transform_wav_to_video
 import math
 import librosa
 
-# from fairseq_transformer import generate_wav
-# from bark_util import generate_wav_for_long_form
-
+# NOTE: 30min 内大约读 4500 个字
+CHINESE_WORD_LIMIT_HALF_HOUR = 4500
 # model_name = 'tts_models/zh-CN/baker/tacotron2-DDC-GST'
 model_name = 'tts_models/multilingual/multi-dataset/xtts_v2'
 tts = TTS(model_name=model_name, progress_bar=True, gpu=False)
@@ -212,11 +211,6 @@ def save_table_of_contents(file_path, table_of_contents: Dict):
             w = f'{k:>5}:{v} \n'
             print(w)
             f.write(w)
-
-
-def audio_enhancement(wav, sample_rate):
-    # enhanced_wav = logmmse(wav, sample_rate)
-    return wav
 
 
 def cli_main_process():
