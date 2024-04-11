@@ -40,18 +40,32 @@ def load_txt_file(file_path):
         return output
 
 
-def generate_audio_clip(text: List, output_path: str, sample_rate=22050):
-    wav = []
-    for sub_text in text:
-        sentences = mask_punctuations(text=sub_text)
-        if sentences:
-            # NOTE: model limit is 82
-            for processed_sentences in split_long_sentences(sentences):
-                wav.extend(tts.tts(text=processed_sentences, speaker_wav="./resources/female.wav", language="zh-cn",
-                                   speed=1.24, split_sentences=False))
+def get_word_num(text):
+    return len(re.findall(u'[\u4e00-\u9fff]', text))
 
-    stretched_audio = librosa.effects.time_stretch(y=np.array(wav, dtype=np.float32), rate=1.24, n_fft=512)
-    write(output_path, sample_rate, stretched_audio)
+
+def generate_audio_clip(text: str, output_path: str, sample_rate=22050):
+    word_count = 0
+    video_clip_index = 1
+    wav = []
+    sentences = mask_punctuations(text=text)
+    # NOTE: model limit is 82
+    for processed_sentences in split_long_sentences(sentences):
+        wav.extend(tts.tts(text=processed_sentences, speaker_wav="./resources/female.wav", language="zh-cn",
+                           speed=1.24, split_sentences=False))
+        word_count += get_word_num(text=processed_sentences)
+
+        if word_count > CHINESE_WORD_LIMIT_HALF_HOUR:
+            stretched_audio = librosa.effects.time_stretch(y=np.array(wav, dtype=np.float32), rate=1.24,
+                                                           n_fft=512)
+            write(f'{output_path}-{video_clip_index}', sample_rate, stretched_audio)
+            video_clip_index += 1
+            wav = []
+            word_count = 0
+
+    if wav:
+        stretched_audio = librosa.effects.time_stretch(y=np.array(wav, dtype=np.float32), rate=1.24, n_fft=512)
+        write(f'{output_path}-{video_clip_index}', sample_rate, stretched_audio)
 
 
 def mask_punctuations(text):
@@ -73,7 +87,9 @@ def mask_punctuations(text):
     return text
 
 
-def split_long_sentences(input_str, model_limit=30):
+def split_long_sentences(input_str, model_limit=30) -> List[str]:
+    if not input_str:
+        return []
     pieces = math.ceil(len(input_str) / model_limit)
     character_for_each_piece = len(input_str) // pieces
     candidates = re.split(r'([，。？！：“”])', input_str)
@@ -225,7 +241,7 @@ def cli_main_process():
 
         Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
         if not os.path.isfile(output_path):
-            generate_audio_clip(text=[''.join(contents[idx])], output_path=output_path, sample_rate=22050)
+            generate_audio_clip(text=''.join(contents[idx]), output_path=output_path, sample_rate=22050)
 
         transform_wav_to_video(number=idx, audio=output_path, toc=toc[idx])
     # construct_text_and_name(raw_data=raw_data, book_name=book_name, generate=True)
