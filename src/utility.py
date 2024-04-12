@@ -44,6 +44,16 @@ def get_word_num(text):
     return len(re.findall(u'[\u4e00-\u9fff]', text))
 
 
+def save_audio_file(wav, sample_rate, output_path: str, video_clip_index: int) -> None:
+    audio_file_path = f'{output_path}-{video_clip_index}.wav'
+    if os.path.isfile(audio_file_path):
+        print(f"{audio_file_path} is already generated !")
+        return
+    stretched_audio = librosa.effects.time_stretch(y=np.array(wav, dtype=np.float32), rate=1.24,
+                                                   n_fft=512)
+    write(audio_file_path, sample_rate, stretched_audio)
+
+
 def generate_audio_clip(text: str, output_path: str, sample_rate=22050):
     word_count = 0
     video_clip_index = 1
@@ -56,16 +66,14 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=22050):
         word_count += get_word_num(text=processed_sentences)
 
         if word_count > CHINESE_WORD_LIMIT_HALF_HOUR:
-            stretched_audio = librosa.effects.time_stretch(y=np.array(wav, dtype=np.float32), rate=1.24,
-                                                           n_fft=512)
-            write(f'{output_path}-{video_clip_index}', sample_rate, stretched_audio)
+            save_audio_file(wav=wav, sample_rate=sample_rate, output_path=output_path,
+                            video_clip_index=video_clip_index)
             video_clip_index += 1
             wav = []
             word_count = 0
 
     if wav:
-        stretched_audio = librosa.effects.time_stretch(y=np.array(wav, dtype=np.float32), rate=1.24, n_fft=512)
-        write(f'{output_path}-{video_clip_index}', sample_rate, stretched_audio)
+        save_audio_file(wav=wav, sample_rate=sample_rate, output_path=output_path, video_clip_index=video_clip_index)
     else:
         video_clip_index -= 1
 
@@ -236,20 +244,14 @@ def cli_main_process():
     for idx in span:
         if idx not in toc:
             break
-        output_audio_path = f'{os.path.dirname(__file__)}/../output/{toc[idx]}.wav'
-        output_video_path = f'{os.path.dirname(__file__)}/../output/{toc[idx]}.mp4'
+        output_path = f'{os.path.dirname(__file__)}/../output/{toc[idx]}'
 
-        if os.path.isfile(output_video_path) or os.path.isfile(output_audio_path):
-            print(f"{output_video_path} is already generated !")
-            continue
+        Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
 
-        Path(os.path.dirname(output_audio_path)).mkdir(parents=True, exist_ok=True)
-
-        clip_num = generate_audio_clip(text=''.join(contents[idx]), output_path=output_audio_path, sample_rate=22050)
+        clip_num = generate_audio_clip(text=''.join(contents[idx]), output_path=output_path, sample_rate=22050)
 
         for i in range(clip_num):
-            transform_wav_to_video(number=idx, audio=f'{output_audio_path}-{i + 1}', toc=toc[idx])
-    # construct_text_and_name(raw_data=raw_data, book_name=book_name, generate=True)
+            transform_wav_to_video(number=idx, audio=f'{output_path}-{i + 1}.wav', toc=toc[idx])
 
 
 def parse_arguments():
