@@ -240,6 +240,12 @@ def cli_main_process():
     raw_data = load_txt_file(book_file_path[0])
     toc, contents = construct_text_and_name(raw_data=raw_data, book_name=book_name)
 
+    for idx in sorted(toc.keys(), reverse=True):
+        output_path = f'{os.path.dirname(__file__)}/../output/{toc[idx]}'
+        if os.path.isfile(f'{output_path}-1.wav') or os.path.isfile(f'{output_path}-1.mp4'):
+            print(f'Last generated chapter is {idx}: {output_path}')
+            break
+
     span = ask_for_output_range(total=max(toc.keys()))
     for idx in span:
         if idx not in toc:
