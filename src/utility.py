@@ -15,7 +15,7 @@ import math
 import librosa
 
 # NOTE: 30min 内大约读 4500 个字
-CHINESE_WORD_LIMIT_HALF_HOUR = 4500
+CHINESE_WORD_LIMIT_HALF_HOUR = 6300
 # model_name = 'tts_models/zh-CN/baker/tacotron2-DDC-GST'
 model_name = 'tts_models/multilingual/multi-dataset/xtts_v2'
 tts = TTS(model_name=model_name, progress_bar=True, gpu=False)
