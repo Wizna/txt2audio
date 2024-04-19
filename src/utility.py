@@ -267,8 +267,8 @@ def cli_main_process():
 
         clip_num = generate_audio_clip(text=''.join(contents[idx]), output_path=output_path, sample_rate=22050)
 
-        for i in range(clip_num):
-            transform_wav_to_video(number=idx, audio=f'{output_path}-{i + 1}.wav', toc=toc[idx])
+        for i in clip_num:
+            transform_wav_to_video(number=idx, audio=f'{output_path}-{i}.wav', toc=toc[idx])
 
 
 def parse_arguments():
