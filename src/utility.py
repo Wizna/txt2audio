@@ -44,14 +44,15 @@ def get_word_num(text):
     return len(re.findall(u'[\u4e00-\u9fff]', text))
 
 
-def save_audio_file(wav, sample_rate, output_path: str, video_clip_index: int) -> None:
+def save_audio_file(wav, sample_rate, output_path: str, video_clip_index: int, export_indices: List) -> None:
     if not wav:
         return
-
+    export_indices.append(video_clip_index)
     audio_file_path = f'{output_path}-{video_clip_index}.wav'
     stretched_audio = librosa.effects.time_stretch(y=np.array(wav, dtype=np.float32), rate=1.24,
                                                    n_fft=512)
     write(audio_file_path, sample_rate, stretched_audio)
+
 
 def check_export_file_exists(output_path, video_clip_index):
     export_file_path = f'{output_path}-{video_clip_index}.mp4'
@@ -61,9 +62,11 @@ def check_export_file_exists(output_path, video_clip_index):
 
     return export
 
+
 def generate_audio_clip(text: str, output_path: str, sample_rate=22050):
     word_count = 0
     video_clip_index = 1
+    exported_clip_indices = []
     wav = []
     sentences = mask_punctuations(text=text)
     export = check_export_file_exists(output_path=output_path, video_clip_index=video_clip_index)
@@ -76,18 +79,16 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=22050):
 
         if word_count > CHINESE_WORD_LIMIT_HALF_HOUR:
             save_audio_file(wav=wav, sample_rate=sample_rate, output_path=output_path,
-                            video_clip_index=video_clip_index)
+                            video_clip_index=video_clip_index, export_indices=exported_clip_indices)
             video_clip_index += 1
             wav = []
             word_count = 0
             export = check_export_file_exists(output_path=output_path, video_clip_index=video_clip_index)
 
-    if wav:
-        save_audio_file(wav=wav, sample_rate=sample_rate, output_path=output_path, video_clip_index=video_clip_index)
-    else:
-        video_clip_index -= 1
+    save_audio_file(wav=wav, sample_rate=sample_rate, output_path=output_path, video_clip_index=video_clip_index,
+                    export_indices=exported_clip_indices)
 
-    return video_clip_index
+    return exported_clip_indices
 
 
 def mask_punctuations(text):
