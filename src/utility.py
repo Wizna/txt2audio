@@ -53,16 +53,20 @@ def save_audio_file(wav, sample_rate, output_path: str, video_clip_index: int) -
                                                    n_fft=512)
     write(audio_file_path, sample_rate, stretched_audio)
 
+def check_export_file_exists(output_path, video_clip_index):
+    export_file_path = f'{output_path}-{video_clip_index}.mp4'
+    export = not os.path.isfile(export_file_path)
+    if not export:
+        print(f"{export_file_path} is already generated !")
+
+    return export
 
 def generate_audio_clip(text: str, output_path: str, sample_rate=22050):
     word_count = 0
     video_clip_index = 1
     wav = []
     sentences = mask_punctuations(text=text)
-    export_file_path = f'{output_path}-{video_clip_index}.mp4'
-    export = not os.path.isfile(export_file_path)
-    if not export:
-        print(f"{export_file_path} is already generated !")
+    export = check_export_file_exists(output_path=output_path, video_clip_index=video_clip_index)
     # NOTE: model limit is 82
     for processed_sentences in split_long_sentences(sentences):
         if export:
@@ -76,10 +80,7 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=22050):
             video_clip_index += 1
             wav = []
             word_count = 0
-            export_file_path = f'{output_path}-{video_clip_index}.mp4'
-            export = not os.path.isfile(export_file_path)
-            if not export:
-                print(f"{export_file_path} is already generated !")
+            export = check_export_file_exists(output_path=output_path, video_clip_index=video_clip_index)
 
     if wav:
         save_audio_file(wav=wav, sample_rate=sample_rate, output_path=output_path, video_clip_index=video_clip_index)
