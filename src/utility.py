@@ -45,10 +45,10 @@ def get_word_num(text):
 
 
 def save_audio_file(wav, sample_rate, output_path: str, video_clip_index: int) -> None:
-    audio_file_path = f'{output_path}-{video_clip_index}.wav'
-    if os.path.isfile(audio_file_path):
-        print(f"{audio_file_path} is already generated !")
+    if not wav:
         return
+
+    audio_file_path = f'{output_path}-{video_clip_index}.wav'
     stretched_audio = librosa.effects.time_stretch(y=np.array(wav, dtype=np.float32), rate=1.24,
                                                    n_fft=512)
     write(audio_file_path, sample_rate, stretched_audio)
@@ -59,10 +59,15 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=22050):
     video_clip_index = 1
     wav = []
     sentences = mask_punctuations(text=text)
+    audio_file_path = f'{output_path}-{video_clip_index}.mp4'
+    export = not os.path.isfile(audio_file_path)
+    if not export:
+        print(f"{audio_file_path} is already generated !")
     # NOTE: model limit is 82
     for processed_sentences in split_long_sentences(sentences):
-        wav.extend(tts.tts(text=processed_sentences, speaker_wav="./resources/female.wav", language="zh-cn",
-                           speed=1.24, split_sentences=False))
+        if export:
+            wav.extend(tts.tts(text=processed_sentences, speaker_wav="./resources/female.wav", language="zh-cn",
+                               speed=1.24, split_sentences=False))
         word_count += get_word_num(text=processed_sentences)
 
         if word_count > CHINESE_WORD_LIMIT_HALF_HOUR:
@@ -71,6 +76,10 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=22050):
             video_clip_index += 1
             wav = []
             word_count = 0
+            audio_file_path = f'{output_path}-{video_clip_index}.mp4'
+            export = not os.path.isfile(audio_file_path)
+            if not export:
+                print(f"{audio_file_path} is already generated !")
 
     if wav:
         save_audio_file(wav=wav, sample_rate=sample_rate, output_path=output_path, video_clip_index=video_clip_index)
