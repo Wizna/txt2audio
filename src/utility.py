@@ -247,6 +247,9 @@ def cli_main_process():
     book_file_path = parse_arguments()
     assert len(book_file_path) == 1 and '.' in book_file_path[0], "输入一个文件路径，且必须包含文件后缀"
     book_name = os.path.basename(book_file_path[0]).split('.')[0]
+    if not os.path.isfile(book_file_path[0]):
+        print("输入的文件路径不是一个文件，请检查文件路径！")
+        return
     print(f'=========== start processing {book_name} =============')
     raw_data = load_txt_file(book_file_path[0])
     toc, contents = construct_text_and_name(raw_data=raw_data, book_name=book_name)
