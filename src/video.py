@@ -31,10 +31,6 @@ def create_image_from_text(number, toc, audio, max_w=720, max_h=1280):
     r, g, b = get_color_from_text(s=toc.split('/')[0])
     img = Image.new('RGB', (max_w, max_h), color=(r, g, b))
 
-    # with importlib.resources.path('txt2audio.resources', 'YunFengFeiYunTi-2.ttf') as font_path, \
-    #         importlib.resources.path('txt2audio.resources',
-    #                                  'YangRenDongZhuShiTi-Extralight-2.ttf') as smaller_font_path, \
-    #         importlib.resources.path('txt2audio.resources', 'DTM-Mono-1.otf') as number_font_path:
     font = ImageFont.truetype(
         f'{os.path.dirname(__file__)}/../resources/YunFengFeiYunTi-2.ttf',
         80)
