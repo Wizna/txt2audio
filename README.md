@@ -17,6 +17,5 @@ NOTE:
 
 - 运行有问题先看 python 库的配置 `pip3 install -r requirements.txt`
 
-TODO:
-- [ ] 模型迁移为 faireseq - transformer
+- 首次运行时可能会碰到需要同意 coqui non-commercial CPML，输入 y 即可，之后会进入模型的下载
 
