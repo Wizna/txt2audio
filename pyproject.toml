@@ -1,0 +1,21 @@
+[project]
+name = "txt2audio"
+version = "0.1.0"
+description = "Transform txt book to audio book with TTS models"
+requires-python = ">=3.11"
+dependencies = [
+    "logmmse",
+    "numpy",
+    "Pillow>=9.0.0",
+    "scipy",
+    "trainer",
+    "charset-normalizer",
+    "librosa",
+    "TTS==0.22.0"
+]
+
+dev = [
+    "pkuseg",
+    "ipython",
+    "fairseq",
+]
