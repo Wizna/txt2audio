@@ -13,9 +13,3 @@ dependencies = [
     "librosa",
     "TTS==0.22.0"
 ]
-
-dev = [
-    "pkuseg",
-    "ipython",
-    "fairseq",
-]
