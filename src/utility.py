@@ -14,10 +14,22 @@ from video import transform_wav_to_video
 import math
 import librosa
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+RESOURCES_DIR = PROJECT_ROOT / 'resources'
+OUTPUT_DIR = PROJECT_ROOT / 'output'
+SPEAKER_WAV = str(RESOURCES_DIR / 'female.wav')
+
 # NOTE: 30min 内大约读 4500 个字
 CHINESE_WORD_LIMIT_HALF_HOUR = 6300
-model_name = 'tts_models/multilingual/multi-dataset/xtts_v2'
-tts = TTS(model_name=model_name, progress_bar=True, gpu=False)
+MODEL_NAME = 'tts_models/multilingual/multi-dataset/xtts_v2'
+_tts = None
+
+
+def get_tts():
+    global _tts
+    if _tts is None:
+        _tts = TTS(model_name=MODEL_NAME, progress_bar=True, gpu=False)
+    return _tts
 
 book_delimiter = '卷章'
 
@@ -54,10 +66,12 @@ def save_audio_file(wav, sample_rate, output_path: str, video_clip_index: int, e
 
 
 def check_export_file_exists(output_path, video_clip_index):
-    export_file_path = f'{output_path}-{video_clip_index}.mp4'
-    export = not os.path.isfile(export_file_path)
+    wav_path = f'{output_path}-{video_clip_index}.wav'
+    mp4_path = f'{output_path}-{video_clip_index}.mp4'
+    export = not (os.path.isfile(wav_path) or os.path.isfile(mp4_path))
     if not export:
-        print(f"{export_file_path} is already generated !")
+        existing = mp4_path if os.path.isfile(mp4_path) else wav_path
+        print(f"{existing} is already generated !")
 
     return export
 
@@ -72,8 +86,8 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=22050):
     # NOTE: model limit is 82
     for processed_sentences in split_long_sentences(sentences):
         if export:
-            wav.extend(tts.tts(text=processed_sentences, speaker_wav="./resources/female.wav", language="zh-cn",
-                               speed=1.24, split_sentences=False))
+            wav.extend(get_tts().tts(text=processed_sentences, speaker_wav=SPEAKER_WAV, language="zh-cn",
+                                     speed=1.24, split_sentences=False))
         word_count += get_word_num(text=processed_sentences)
 
         if word_count > CHINESE_WORD_LIMIT_HALF_HOUR:
@@ -227,7 +241,7 @@ def construct_text_and_name(raw_data, book_name: str):
             contents_of_chapter[toc_index] = contents
             toc_index += 1
 
-    toc_file_path = f'{os.path.dirname(__file__)}/../output/{book_name}/目录.txt'
+    toc_file_path = str(OUTPUT_DIR / book_name / '目录.txt')
     save_table_of_contents(file_path=toc_file_path, table_of_contents=table_of_contents)
 
     return table_of_contents, contents_of_chapter
@@ -243,7 +257,8 @@ def save_table_of_contents(file_path, table_of_contents: Dict):
 
 
 def cli_main_process():
-    book_file_path = parse_arguments()
+    args = parse_arguments()
+    book_file_path = args.input_file_path
     assert len(book_file_path) == 1 and '.' in book_file_path[0], "输入一个文件路径，且必须包含文件后缀"
     book_name = os.path.basename(book_file_path[0]).split('.')[0]
     if not os.path.isfile(book_file_path[0]):
@@ -254,36 +269,43 @@ def cli_main_process():
     toc, contents = construct_text_and_name(raw_data=raw_data, book_name=book_name)
 
     for idx in sorted(toc.keys(), reverse=True):
-        output_path = f'{os.path.dirname(__file__)}/../output/{toc[idx]}'
+        output_path = str(OUTPUT_DIR / toc[idx])
         if os.path.isfile(f'{output_path}-1.wav') or os.path.isfile(f'{output_path}-1.mp4'):
             print(f'Last generated chapter is {idx}: {output_path}')
             break
 
-    span = ask_for_output_range(total=max(toc.keys()))
+    if args.range is not None:
+        span = parse_range_string(args.range, total=max(toc.keys()))
+    else:
+        span = ask_for_output_range(total=max(toc.keys()))
     for idx in span:
         if idx not in toc:
             break
-        output_path = f'{os.path.dirname(__file__)}/../output/{toc[idx]}'
+        output_path = str(OUTPUT_DIR / toc[idx])
 
         Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
 
         clip_num = generate_audio_clip(text=''.join(contents[idx]), output_path=output_path, sample_rate=22050)
 
-        for i in clip_num:
-            transform_wav_to_video(number=idx, audio=f'{output_path}-{i}.wav', toc=toc[idx])
+        if args.video:
+            for i in clip_num:
+                transform_wav_to_video(number=idx, audio=f'{output_path}-{i}.wav', toc=toc[idx],
+                                       resources_dir=RESOURCES_DIR)
 
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Read a text book and transform to an audio book.')
     parser.add_argument('input_file_path', metavar='input_file_path', type=str, nargs=1,
                         help='path to the text book (absolute or relative)')
+    parser.add_argument('--video', action='store_true',
+                        help='generate MP4 video with cover image (default: audio only)')
+    parser.add_argument('--range', type=str, default=None,
+                        help='chapter range, e.g. "all", "8", "0~8" (skips interactive prompt)')
 
-    args = parser.parse_args()
-    return args.input_file_path
+    return parser.parse_args()
 
 
-def ask_for_output_range(total):
-    var = input("请输入转换范围, (all 表示全部): \n")
+def parse_range_string(var, total):
     if len(var) == 0 or var == 'all':
         return range(total)
     else:
@@ -296,3 +318,8 @@ def ask_for_output_range(total):
             s = int(indices[0])
             e = int(indices[1])
             return range(s, e + 1)
+
+
+def ask_for_output_range(total):
+    var = input("请输入转换范围, (all 表示全部): \n")
+    return parse_range_string(var, total)
