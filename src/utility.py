@@ -22,7 +22,7 @@ sys.path.insert(0, str(PROJECT_ROOT / 'third_party' / 'CosyVoice' / 'third_party
 
 MODEL_DIR = str(PROJECT_ROOT / 'pretrained_models' / 'Fun-CosyVoice3-0.5B')
 COSYVOICE_DIR = PROJECT_ROOT / 'third_party' / 'CosyVoice'
-SPEAKER_WAV = str(COSYVOICE_DIR / 'asset' / 'zero_shot_prompt.wav')
+SPEAKER_WAV = str(RESOURCES_DIR / 'my_speaker.wav')
 PROMPT_TEXT = 'You are a helpful assistant.<|endofprompt|>希望你以后能够做的比我还好呦。'
 
 # NOTE: 30min 内大约读 4500 个字
