@@ -18,6 +18,7 @@ def draw_underlined_text(draw, pos, text, font, **options):
 
 
 def get_color_from_text(s, lightness=127):
+    """标题哈希 -> 确定性 RGB，保证同一书名颜色一致。"""
     value = int(hashlib.sha1(s.encode("utf-8")).hexdigest(), 16)
     r = value % lightness
     value //= lightness
@@ -28,6 +29,7 @@ def get_color_from_text(s, lightness=127):
 
 
 def create_image_from_text(number, toc, audio, resources_dir, max_w=720, max_h=1280):
+    """生成视频封面图，toc 格式为 "书名/卷名/章名"，cover.jpg 同目录复用。"""
     r, g, b = get_color_from_text(s=toc.split('/')[0])
     img = Image.new('RGB', (max_w, max_h), color=(r, g, b))
 
@@ -64,6 +66,7 @@ def create_image_from_text(number, toc, audio, resources_dir, max_w=720, max_h=1
 
 
 def transform_wav_to_video(number, audio, toc, resources_dir):
+    """wav + 封面图 -> mp4，成功后删除原 wav。"""
     image = create_image_from_text(number=number, toc=toc, audio=audio, resources_dir=resources_dir)
     video_path = str(Path(audio).with_suffix('.mp4'))
     command_line = (
