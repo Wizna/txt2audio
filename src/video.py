@@ -1,4 +1,6 @@
 import subprocess
+import shlex
+from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 import hashlib
 import re
@@ -63,9 +65,17 @@ def create_image_from_text(number, toc, audio, resources_dir, max_w=720, max_h=1
 
 def transform_wav_to_video(number, audio, toc, resources_dir):
     image = create_image_from_text(number=number, toc=toc, audio=audio, resources_dir=resources_dir)
-    video_path = audio.replace('wav', 'mp4')
-    command_line = f'ffmpeg -loop 1 -i {image} -i {audio} -c:v libx264 -tune stillimage -c:a aac -b:a 192k -pix_fmt yuv420p -shortest {video_path} && rm -f {audio}'
+    video_path = str(Path(audio).with_suffix('.mp4'))
+    command_line = (
+        f'ffmpeg -loop 1 -i {shlex.quote(image)} -i {shlex.quote(audio)}'
+        f' -c:v libx264 -tune stillimage -c:a aac -b:a 192k -pix_fmt yuv420p'
+        f' -shortest {shlex.quote(video_path)}'
+    )
     print(f'the conversion command:\n {command_line}')
-    # subprocess.run(shlex.split(command_line))
     ret = subprocess.run(command_line, capture_output=True, shell=True)
     print(ret.stdout.decode())
+    if ret.returncode == 0:
+        os.remove(audio)
+    else:
+        print(f'ffmpeg failed (code {ret.returncode}), keeping {audio}')
+        print(ret.stderr.decode())

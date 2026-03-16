@@ -1,7 +1,5 @@
 from typing import List, Dict
-import io
 import sys
-from contextlib import redirect_stdout
 import argparse
 
 from charset_normalizer import from_path
@@ -40,21 +38,9 @@ def get_tts():
 book_delimiter = '卷章'
 
 
-def print_to_string(*args, **kwargs):
-    output = io.StringIO()
-    print(*args, file=output, **kwargs)
-    contents = output.getvalue()
-    output.close()
-    return contents
-
-
 def load_txt_file(file_path):
     results = from_path(file_path)
-    with io.StringIO() as buf, redirect_stdout(buf):
-        print(results.best())
-        output = buf.getvalue()
-
-        return output
+    return str(results.best())
 
 
 def get_word_num(text):
@@ -161,7 +147,7 @@ def split_long_sentences(input_str, model_limit=200) -> List[str]:
     return result
 
 
-def generate_chapter(chapter_text: List, chapter_name, last_special_delimiter):
+def generate_chapter(chapter_name, last_special_delimiter):
     if last_special_delimiter:
         combined_name = '/'.join([i for i in chapter_name if i])
     else:
@@ -222,7 +208,7 @@ def construct_text_and_name(raw_data, book_name: str):
 
         if new_chapter:
             if contents:
-                chapter_name = generate_chapter(chapter_text=contents, chapter_name=chapter_structure,
+                chapter_name = generate_chapter(chapter_name=chapter_structure,
                                                 last_special_delimiter=last_special_delimiter)
                 if chapter_name:
                     table_of_contents[toc_index] = chapter_name
@@ -246,7 +232,7 @@ def construct_text_and_name(raw_data, book_name: str):
             last_special_delimiter = True
 
     if contents:
-        chapter_name = generate_chapter(chapter_text=contents, chapter_name=chapter_structure,
+        chapter_name = generate_chapter(chapter_name=chapter_structure,
                                         last_special_delimiter=last_special_delimiter)
         if chapter_name:
             table_of_contents[toc_index] = chapter_name
@@ -272,7 +258,7 @@ def cli_main_process():
     args = parse_arguments()
     book_file_path = args.input_file_path
     assert len(book_file_path) == 1 and '.' in book_file_path[0], "输入一个文件路径，且必须包含文件后缀"
-    book_name = os.path.basename(book_file_path[0]).split('.')[0]
+    book_name = Path(book_file_path[0]).stem
     if not os.path.isfile(book_file_path[0]):
         print("输入的文件路径不是一个文件，请检查文件路径！")
         return
@@ -285,6 +271,10 @@ def cli_main_process():
         if os.path.isfile(f'{output_path}-1.wav') or os.path.isfile(f'{output_path}-1.mp4'):
             print(f'Last generated chapter is {idx}: {output_path}')
             break
+
+    if not toc:
+        print("未解析到任何章节，请检查文件内容！")
+        return
 
     if args.range is not None:
         span = parse_range_string(args.range, total=max(toc.keys()))
@@ -319,7 +309,7 @@ def parse_arguments():
 
 def parse_range_string(var, total):
     if len(var) == 0 or var == 'all':
-        return range(total)
+        return range(total + 1)
     else:
         indices = re.split('[~-]', var)
         assert len(indices) in (1, 2), "请输入单个数字或者一个范围, e.g. 8 or 0~8"
