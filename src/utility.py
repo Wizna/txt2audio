@@ -81,8 +81,8 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=None):
     video_clip_index = 1
     exported_clip_indices = []
     wav_chunks = []
-    sentences = mask_punctuations(text=text)
-    sentences = annotate_polyphones(sentences)
+    sentences = annotate_polyphones(text)
+    sentences = mask_punctuations(text=sentences)
     export = check_export_file_exists(output_path=output_path, video_clip_index=video_clip_index)
 
     for processed_sentences in split_long_sentences(sentences):
