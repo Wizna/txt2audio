@@ -168,6 +168,14 @@ _VALID_PINYIN_TOKENS = {
 # 需要拼音标注的高频多音字（仅标注 TTS 经常读错的字，避免过度标注影响自然度）
 _POLYPHONE_CHARS = set('为给相与处应传觉差校')
 
+# pypinyin 自定义词典：纠正 pypinyin 消歧错误的词组
+from pypinyin import load_phrases_dict
+load_phrases_dict({
+    '精校': [['jīng'], ['jiào']],
+    '校对': [['jiào'], ['duì']],
+    '校勘': [['jiào'], ['kān']],
+})
+
 
 def annotate_polyphones(text: str) -> str:
     """对多音字注入 CosyVoice3 拼音 token，如 '给予' → '[j][ǐ]予'。"""
