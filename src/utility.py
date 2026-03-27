@@ -184,19 +184,26 @@ def annotate_polyphones(text: str) -> str:
     tone_readings = pinyin(text, style=Style.TONE, heteronym=False, strict=True)
 
     result = []
-    for i, char in enumerate(text):
+    text_pos = 0
+    for reading_entry in tone_readings:
+        val = reading_entry[0]
+        char = text[text_pos]
+
+        # 非汉字：pypinyin 把连续非汉字合并为一个条目
         if not ('\u4e00' <= char <= '\u9fff'):
-            result.append(char)
+            result.append(val)
+            text_pos += len(val)
             continue
 
-        # 仅标注白名单中的多音字
+        text_pos += 1
+
+        # 非多音字
         if char not in _POLYPHONE_CHARS:
             result.append(char)
             continue
 
-        reading = tone_readings[i][0]
-        initial = to_initials(reading, strict=False)
-        final = to_finals_tone(reading, strict=False)
+        initial = to_initials(val, strict=False)
+        final = to_finals_tone(val, strict=False)
 
         # ü → v fallback (CosyVoice3 用 v 表示复合韵母中的 ü)
         if final not in _VALID_PINYIN_TOKENS:
