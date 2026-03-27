@@ -3,6 +3,8 @@ import sys
 import argparse
 
 from charset_normalizer import from_path
+from pypinyin import pinyin, Style
+from pypinyin.contrib.tone_convert import to_initials, to_finals_tone
 import re
 import os
 from pathlib import Path
@@ -80,6 +82,7 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=None):
     exported_clip_indices = []
     wav_chunks = []
     sentences = mask_punctuations(text=text)
+    sentences = annotate_polyphones(sentences)
     export = check_export_file_exists(output_path=output_path, video_clip_index=video_clip_index)
 
     for processed_sentences in split_long_sentences(sentences):
@@ -122,6 +125,102 @@ def mask_punctuations(text):
     if re.search(u'[\u4e00-\u9fff]', text[-1]):  # 确保以句号结尾，TTS 需要
         text += '。'
     return text
+
+
+# 从 CosyVoice3Tokenizer 的 additional_special_tokens 提取的合法拼音 token 集合
+# (来源: third_party/CosyVoice/cosyvoice/tokenizer/tokenizer.py:295-307)
+_VALID_PINYIN_TOKENS = {
+    # 声母
+    'b', 'c', 'ch', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'm', 'n',
+    'p', 'q', 'r', 's', 'sh', 't', 'w', 'x', 'y', 'z', 'zh',
+    # 韵母 (无声调)
+    'a', 'ai', 'an', 'ang', 'ao', 'e', 'ei', 'en', 'eng', 'i',
+    'ian', 'in', 'ing', 'iu', 'o', 'ong', 'ou', 'u', 'uang', 'ue',
+    'un', 'uo',
+    # 带声调韵母 — i 系列
+    'ià', 'iàn', 'iàng', 'iào', 'iá', 'ián', 'iáng', 'iáo',
+    'iè', 'ié', 'iòng', 'ióng', 'iù', 'iú',
+    'iā', 'iān', 'iāng', 'iāo', 'iē', 'iě', 'iōng', 'iū',
+    'iǎ', 'iǎn', 'iǎng', 'iǎo', 'iǒng', 'iǔ',
+    # 带声调韵母 — u 系列
+    'uà', 'uài', 'uàn', 'uàng', 'uá', 'uái', 'uán', 'uáng',
+    'uè', 'ué', 'uì', 'uí', 'uò', 'uó',
+    'uā', 'uāi', 'uān', 'uāng', 'uē', 'uě', 'uī', 'uō',
+    'uǎ', 'uǎi', 'uǎn', 'uǎng', 'uǐ', 'uǒ',
+    # 带声调韵母 — v (ü) 系列
+    'vè',
+    # 带声调韵母 — 独立元音
+    'à', 'ài', 'àn', 'àng', 'ào', 'á', 'ái', 'án', 'áng', 'áo',
+    'è', 'èi', 'èn', 'èng', 'èr', 'é', 'éi', 'én', 'éng', 'ér',
+    'ì', 'ìn', 'ìng', 'í', 'ín', 'íng',
+    'ò', 'òng', 'òu', 'ó', 'óng', 'óu',
+    'ù', 'ùn', 'ú', 'ún',
+    'ā', 'āi', 'ān', 'āng', 'āo', 'ē', 'ēi', 'ēn', 'ēng',
+    'ě', 'ěi', 'ěn', 'ěng', 'ěr',
+    'ī', 'īn', 'īng', 'ō', 'ōng', 'ōu', 'ū', 'ūn',
+    'ǎ', 'ǎi', 'ǎn', 'ǎng', 'ǎo', 'ǐ', 'ǐn', 'ǐng',
+    'ǒ', 'ǒng', 'ǒu', 'ǔ', 'ǔn',
+    # 独立 ü 韵母
+    'ǘ', 'ǚ', 'ǜ',
+}
+
+
+# 需要拼音标注的常见多音字（在小说语境中容易读错的字）
+_POLYPHONE_CHARS = set(
+    '行还给重得了为着的地好长大干乐种数量会处传'
+    '觉倒难看教奔差藏称朝弹当调度分更供过和划'
+    '几间将降尽禁据卷乐落没磨难弄排迫仆栖强切'
+    '曲塞散舍什省识似宿弹挑吐鲜相兴咽应与扎占'
+    '折正只中转属角模参解答便把喝要'
+)
+
+
+def annotate_polyphones(text: str) -> str:
+    """对多音字注入 CosyVoice3 拼音 token，如 '给予' → '[j][ǐ]予'。"""
+    if not text:
+        return text
+
+    # 整句上下文消歧
+    tone_readings = pinyin(text, style=Style.TONE, heteronym=False, strict=True)
+
+    result = []
+    for i, char in enumerate(text):
+        if not ('\u4e00' <= char <= '\u9fff'):
+            result.append(char)
+            continue
+
+        # 仅标注白名单中的多音字
+        if char not in _POLYPHONE_CHARS:
+            result.append(char)
+            continue
+
+        reading = tone_readings[i][0]
+        initial = to_initials(reading, strict=False)
+        final = to_finals_tone(reading, strict=False)
+
+        # ü → v fallback (CosyVoice3 用 v 表示复合韵母中的 ü)
+        if final not in _VALID_PINYIN_TOKENS:
+            final_v = final.replace('ü', 'v')
+            if final_v in _VALID_PINYIN_TOKENS:
+                final = final_v
+
+        # 验证 token 合法性
+        if initial and initial not in _VALID_PINYIN_TOKENS:
+            result.append(char)
+            continue
+        if final and final not in _VALID_PINYIN_TOKENS:
+            result.append(char)
+            continue
+
+        tokens = []
+        if initial:
+            tokens.append(f'[{initial}]')
+        if final:
+            tokens.append(f'[{final}]')
+
+        result.append(''.join(tokens) if tokens else char)
+
+    return ''.join(result)
 
 
 def split_long_sentences(input_str, model_limit=200) -> List[str]:

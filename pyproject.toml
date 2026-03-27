@@ -34,6 +34,7 @@ dependencies = [
     "x-transformers>=2.16.2",
     "pyarrow>=23.0.1",
     "pyworld>=0.3.5",
+    "pypinyin>=0.53.0",
 ]
 [tool.uv.extra-build-dependencies]
 openai-whisper = ["setuptools"]
