@@ -166,7 +166,7 @@ _VALID_PINYIN_TOKENS = {
 
 
 # 需要拼音标注的高频多音字（仅标注 TTS 经常读错的字，避免过度标注影响自然度）
-_POLYPHONE_CHARS = set('')
+_POLYPHONE_CHARS = set('校')
 
 # pypinyin 自定义词典：纠正 pypinyin 消歧错误的词组
 from pypinyin import load_phrases_dict
