@@ -202,6 +202,11 @@ def annotate_polyphones(text: str) -> str:
             result.append(char)
             continue
 
+        # 轻声不标注（无声调符号，如 'de', 'le'）
+        if not any(c in val for c in 'āáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ'):
+            result.append(char)
+            continue
+
         initial = to_initials(val, strict=False)
         final = to_finals_tone(val, strict=False)
 
