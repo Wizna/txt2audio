@@ -33,9 +33,17 @@ def create_image_from_text(number, toc, audio, resources_dir, max_w=720, max_h=1
     r, g, b = get_color_from_text(s=toc.split('/')[0])
     img = Image.new('RGB', (max_w, max_h), color=(r, g, b))
 
-    font = ImageFont.truetype(str(resources_dir / 'YunFengFeiYunTi-2.ttf'), 80)
-    smaller_font = ImageFont.truetype(str(resources_dir / 'YangRenDongZhuShiTi-Extralight-2.ttf'), 70)
-    number_font = ImageFont.truetype(str(resources_dir / 'DTM-Mono-1.otf'), 40)
+    try:
+        font = ImageFont.truetype(str(resources_dir / 'YunFengFeiYunTi-2.ttf'), 80)
+        smaller_font = ImageFont.truetype(str(resources_dir / 'YangRenDongZhuShiTi-Extralight-2.ttf'), 70)
+        number_font = ImageFont.truetype(str(resources_dir / 'DTM-Mono-1.otf'), 40)
+    except (OSError, IOError) as e:
+        print(f"⚠️  Warning: Could not load custom fonts from {resources_dir}")
+        print(f"Error: {e}")
+        print("Falling back to default font. Video covers will use system default.")
+        font = ImageFont.load_default()
+        smaller_font = ImageFont.load_default()
+        number_font = ImageFont.load_default()
 
     d = ImageDraw.Draw(img)
 

@@ -33,8 +33,15 @@ _tts = None
 def get_tts():
     global _tts
     if _tts is None:
-        from cosyvoice.cli.cosyvoice import AutoModel
-        _tts = AutoModel(model_dir=MODEL_DIR)
+        try:
+            from cosyvoice.cli.cosyvoice import AutoModel
+            _tts = AutoModel(model_dir=MODEL_DIR)
+        except Exception as e:
+            print(f"\n❌ Failed to load CosyVoice model from: {MODEL_DIR}")
+            print(f"Error: {e}")
+            print("\nPlease ensure the model is downloaded:")
+            print("  uv run python -c \"from huggingface_hub import snapshot_download; snapshot_download('FunAudioLLM/Fun-CosyVoice3-0.5B-2512', local_dir='pretrained_models/Fun-CosyVoice3-0.5B')\"")
+            raise SystemExit(1)
     return _tts
 
 book_delimiter = '卷章'  # 按字符迭代，依次匹配卷、章
@@ -373,8 +380,23 @@ def save_table_of_contents(file_path, table_of_contents: Dict):
             f.write(w)
 
 
+import subprocess as _subprocess
+
+
+def _check_ffmpeg():
+    """Check if ffmpeg is available on the system."""
+    try:
+        _subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
+    except (FileNotFoundError, _subprocess.CalledProcessError):
+        print("❌ Error: ffmpeg not found. Please install ffmpeg to generate videos.")
+        print("  macOS: brew install ffmpeg")
+        raise SystemExit(1)
+
+
 def cli_main_process():
     args = parse_arguments()
+    if args.video:
+        _check_ffmpeg()
     book_file_path = args.input_file_path
     assert len(book_file_path) == 1 and '.' in book_file_path[0], "输入一个文件路径，且必须包含文件后缀"
     book_name = Path(book_file_path[0]).stem
