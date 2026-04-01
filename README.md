@@ -74,11 +74,38 @@ src/
   transform_to_audio.py   # 入口
   utility.py              # 文本解析、音频生成、CLI 逻辑
   video.py                # 封面图生成、ffmpeg 转视频
+  config.py               # 配置加载
+config.yaml               # 配置文件（TTS、音频、视频、路径等参数）
 resources/                # 字体文件、参考音频
 third_party/CosyVoice/   # CosyVoice 子模块
 pretrained_models/        # 模型权重（gitignored）
 demo/                     # 示例文本文件
 ```
+
+## 配置
+
+编辑项目根目录的 `config.yaml` 即可自定义参数，无需改代码：
+
+```yaml
+tts:
+  speaker_wav: resources/my_speaker.wav    # 换声音：替换参考音频文件
+  prompt_text: "..."                       # 零样本 TTS 提示文本
+  model_dir: pretrained_models/Fun-CosyVoice3-0.5B
+
+audio:
+  chinese_word_limit_half_hour: 6300       # 每个音频片段的汉字上限（约 30 分钟）
+  model_sentence_limit: 200               # TTS 模型单次输入的字符上限
+
+video:
+  width: 720                               # 封面图尺寸
+  height: 1280
+  ffmpeg_audio_bitrate: 192k               # FFmpeg 编码参数
+
+paths:
+  output_dir: output                       # 输出目录
+```
+
+所有路径均相对于项目根目录。完整配置项及说明见 `config.yaml`。
 
 ## 注意事项
 

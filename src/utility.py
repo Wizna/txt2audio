@@ -12,21 +12,20 @@ import math
 import torch
 import torchaudio
 from video import transform_wav_to_video
+from config import config, PROJECT_ROOT
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-RESOURCES_DIR = PROJECT_ROOT / 'resources'
-OUTPUT_DIR = PROJECT_ROOT / 'output'
+RESOURCES_DIR = config['paths']['resources_dir']
+OUTPUT_DIR = config['paths']['output_dir']
 
 # CosyVoice submodule needs to be on sys.path for its internal imports
 sys.path.insert(0, str(PROJECT_ROOT / 'third_party' / 'CosyVoice'))
 sys.path.insert(0, str(PROJECT_ROOT / 'third_party' / 'CosyVoice' / 'third_party' / 'Matcha-TTS'))
 
-MODEL_DIR = str(PROJECT_ROOT / 'pretrained_models' / 'Fun-CosyVoice3-0.5B')
-COSYVOICE_DIR = PROJECT_ROOT / 'third_party' / 'CosyVoice'
-SPEAKER_WAV = str(RESOURCES_DIR / 'my_speaker.wav')
-PROMPT_TEXT = 'You are a helpful assistant.<|endofprompt|>希望你以后能够做的比我还好呦。'  # zero-shot TTS prompt
+MODEL_DIR = config['tts']['model_dir']
+SPEAKER_WAV = config['tts']['speaker_wav']
+PROMPT_TEXT = config['tts']['prompt_text']
 
-CHINESE_WORD_LIMIT_HALF_HOUR = 6300  # 每个音频片段的汉字上限（约30分钟）
+CHINESE_WORD_LIMIT_HALF_HOUR = config['audio']['chinese_word_limit_half_hour']
 _tts = None
 
 
@@ -44,7 +43,7 @@ def get_tts():
             raise SystemExit(1)
     return _tts
 
-book_delimiter = '卷章'  # 按字符迭代，依次匹配卷、章
+book_delimiter = config['text_processing']['book_delimiter']
 
 
 def load_txt_file(file_path):
@@ -244,8 +243,10 @@ def annotate_polyphones(text: str) -> str:
     return ''.join(result)
 
 
-def split_long_sentences(input_str, model_limit=200) -> List[str]:
+def split_long_sentences(input_str, model_limit=None) -> List[str]:
     """在中文标点处切分文本，使每段不超过 model_limit 字符。"""
+    if model_limit is None:
+        model_limit = config['audio']['model_sentence_limit']
     if not input_str:
         return []
     pieces = math.ceil(len(input_str) / model_limit)

@@ -5,6 +5,7 @@ from PIL import Image, ImageDraw, ImageFont
 import hashlib
 import re
 import os
+from config import config
 
 
 def draw_underlined_text(draw, pos, text, font, **options):
@@ -28,15 +29,20 @@ def get_color_from_text(s, lightness=127):
     return r, g, b
 
 
-def create_image_from_text(number, toc, audio, resources_dir, max_w=720, max_h=1280):
+def create_image_from_text(number, toc, audio, resources_dir, max_w=None, max_h=None):
     """生成视频封面图，toc 格式为 "书名/卷名/章名"，cover.jpg 同目录复用。"""
+    if max_w is None:
+        max_w = config['video']['width']
+    if max_h is None:
+        max_h = config['video']['height']
+
     r, g, b = get_color_from_text(s=toc.split('/')[0])
     img = Image.new('RGB', (max_w, max_h), color=(r, g, b))
 
     try:
-        font = ImageFont.truetype(str(resources_dir / 'YunFengFeiYunTi-2.ttf'), 80)
-        smaller_font = ImageFont.truetype(str(resources_dir / 'YangRenDongZhuShiTi-Extralight-2.ttf'), 70)
-        number_font = ImageFont.truetype(str(resources_dir / 'DTM-Mono-1.otf'), 40)
+        font = ImageFont.truetype(str(resources_dir / 'YunFengFeiYunTi-2.ttf'), config['video']['font_size_title'])
+        smaller_font = ImageFont.truetype(str(resources_dir / 'YangRenDongZhuShiTi-Extralight-2.ttf'), config['video']['font_size_subtitle'])
+        number_font = ImageFont.truetype(str(resources_dir / 'DTM-Mono-1.otf'), config['video']['font_size_number'])
     except (OSError, IOError) as e:
         print(f"⚠️  Warning: Could not load custom fonts from {resources_dir}")
         print(f"Error: {e}")
@@ -77,9 +83,12 @@ def transform_wav_to_video(number, audio, toc, resources_dir):
     """wav + 封面图 -> mp4，成功后删除原 wav。"""
     image = create_image_from_text(number=number, toc=toc, audio=audio, resources_dir=resources_dir)
     video_path = str(Path(audio).with_suffix('.mp4'))
+    vc = config['video']
     command_line = (
         f'ffmpeg -loop 1 -i {shlex.quote(image)} -i {shlex.quote(audio)}'
-        f' -c:v libx264 -tune stillimage -c:a aac -b:a 192k -pix_fmt yuv420p'
+        f' -c:v {vc["ffmpeg_video_codec"]} -tune {vc["ffmpeg_tune"]}'
+        f' -c:a {vc["ffmpeg_audio_codec"]} -b:a {vc["ffmpeg_audio_bitrate"]}'
+        f' -pix_fmt {vc["ffmpeg_pixel_format"]}'
         f' -shortest {shlex.quote(video_path)}'
     )
     print(f'the conversion command:\n {command_line}')
