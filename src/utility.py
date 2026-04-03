@@ -25,7 +25,7 @@ MODEL_DIR = config['tts']['model_dir']
 SPEAKER_WAV = config['tts']['speaker_wav']
 PROMPT_TEXT = config['tts']['prompt_text']
 
-CHINESE_WORD_LIMIT_HALF_HOUR = config['audio']['chinese_word_limit_half_hour']
+MAX_CHARS_PER_CLIP = config['audio']['max_chars_per_clip']
 _tts = None
 
 
@@ -78,7 +78,7 @@ def check_export_file_exists(output_path, video_clip_index):
 
 
 def generate_audio_clip(text: str, output_path: str, sample_rate=None):
-    """将一章文本转为音频，按字数上限切分为多个 ~30min 片段。"""
+    """将一章文本转为音频，按 MAX_CHARS_PER_CLIP 切分为多个片段（-1 则不分片）。"""
     cosyvoice = get_tts()
     if sample_rate is None:
         sample_rate = cosyvoice.sample_rate
@@ -99,7 +99,7 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=None):
                 wav_chunks.append(chunk['tts_speech'])
         word_count += get_word_num(text=processed_sentences)
 
-        if word_count > CHINESE_WORD_LIMIT_HALF_HOUR:
+        if MAX_CHARS_PER_CLIP > 0 and word_count > MAX_CHARS_PER_CLIP:
             combined = torch.cat(wav_chunks, dim=-1) if wav_chunks else None
             save_audio_file(combined, sample_rate, output_path, video_clip_index, exported_clip_indices)
             video_clip_index += 1

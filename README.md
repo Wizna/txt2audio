@@ -93,7 +93,7 @@ tts:
   model_dir: pretrained_models/Fun-CosyVoice3-0.5B
 
 audio:
-  chinese_word_limit_half_hour: 6300       # 每个音频片段的汉字上限（约 30 分钟）
+  max_chars_per_clip: 6300                 # 每个音频片段的汉字上限（-1 = 不分片）
   model_sentence_limit: 200               # TTS 模型单次输入的字符上限
 
 video:
