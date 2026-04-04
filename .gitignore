@@ -134,6 +134,7 @@ dmypy.json
 
 output
 
+CLAUDE.md
 .claude
 .specify
 pretrained_models/
