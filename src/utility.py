@@ -125,7 +125,7 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=None):
 def mask_punctuations(text):
     text = text.replace('——', '，')
     text = re.sub(r'[\u201c\u201d\u2018\u2019]', '', text)  # remove Chinese quotes “”''
-    text = re.sub(r”([！？=@。])+”, r”\1”, text)  # replace ?! -> !
+    text = re.sub(r"([！？=@。])+", r"\1", text)  # replace ?! -> !
     text = re.sub(r"([！@=…？])\1+", r"\1", text)  # replace !! -> !
     text = re.sub(r'[…]+', '。', text)
     text = text.replace('·', '').replace('※', '')
