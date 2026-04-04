@@ -9,15 +9,19 @@ tts:
   model_dir: pretrained_models/Fun-CosyVoice3-0.5B
   # 说话人参考音频（零样本克隆的声音来源）
   speaker_wav: resources/my_speaker.wav
-  # 零样本 TTS 提示文本
+  # 零样本 TTS 提示文本（<|endofprompt|> 后的中文必须与 speaker_wav 中说的内容完全一致）
   prompt_text: "You are a helpful assistant.<|endofprompt|>他站在城墙上，望着远处的千军万马，脸上没有一丝慌乱。"
+  # 语速：1.0=正常，<1.0=慢，>1.0=快（有声书建议 0.9~1.0，低于 0.85 会失真）
+  speed: 0.95
+  # 句间静音填充（毫秒），增加自然停顿感（0=禁用，建议 100~200）
+  inter_sentence_silence_ms: 150
 
 # 音频生成
 audio:
   # 每个音频片段的汉字上限（-1 表示不分片，整章一个文件）
   max_chars_per_clip: 6300
-  # TTS 模型单次输入的字符上限
-  model_sentence_limit: 200
+  # TTS 模型单次输入的字符上限（实际分句由 CosyVoice 内部 split_paragraph 处理）
+  model_sentence_limit: 2000
 
 # 视频封面
 video:

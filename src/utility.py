@@ -26,6 +26,8 @@ SPEAKER_WAV = config['tts']['speaker_wav']
 PROMPT_TEXT = config['tts']['prompt_text']
 
 MAX_CHARS_PER_CLIP = config['audio']['max_chars_per_clip']
+SPEED = config['tts'].get('speed', 1.0)
+INTER_SENTENCE_SILENCE_MS = config['tts'].get('inter_sentence_silence_ms', 0)
 _tts = None
 
 
@@ -35,6 +37,7 @@ def get_tts():
         try:
             from cosyvoice.cli.cosyvoice import AutoModel
             _tts = AutoModel(model_dir=MODEL_DIR)
+            _tts.add_zero_shot_spk(PROMPT_TEXT, SPEAKER_WAV, 'narrator')
         except Exception as e:
             print(f"\n❌ Failed to load CosyVoice model from: {MODEL_DIR}")
             print(f"Error: {e}")
@@ -91,10 +94,17 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=None):
     sentences = mask_punctuations(text=sentences)
     export = check_export_file_exists(output_path=output_path, video_clip_index=video_clip_index)
 
+    silence = None
+    if INTER_SENTENCE_SILENCE_MS > 0:
+        silence = torch.zeros(1, int(sample_rate * INTER_SENTENCE_SILENCE_MS / 1000))
+
     for processed_sentences in split_long_sentences(sentences):
         if export:
+            if silence is not None and wav_chunks:
+                wav_chunks.append(silence)
             for chunk in cosyvoice.inference_zero_shot(
-                processed_sentences, PROMPT_TEXT, SPEAKER_WAV, stream=False
+                processed_sentences, PROMPT_TEXT, SPEAKER_WAV,
+                zero_shot_spk_id='narrator', stream=False, speed=SPEED
             ):
                 wav_chunks.append(chunk['tts_speech'])
         word_count += get_word_num(text=processed_sentences)
@@ -113,8 +123,9 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=None):
 
 
 def mask_punctuations(text):
+    text = text.replace('——', '，')
     text = re.sub(r'[\u201c\u201d\u2018\u2019]', '', text)  # remove Chinese quotes “”''
-    text = re.sub(r"([！？=@。])+", r"\1", text)  # replace ?! -> !
+    text = re.sub(r”([！？=@。])+”, r”\1”, text)  # replace ?! -> !
     text = re.sub(r"([！@=…？])\1+", r"\1", text)  # replace !! -> !
     text = re.sub(r'[…]+', '。', text)
     text = text.replace('·', '').replace('※', '')
