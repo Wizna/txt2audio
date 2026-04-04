@@ -1,3 +1,6 @@
+import os
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+
 from typing import List, Dict
 import sys
 import argparse
@@ -6,7 +9,6 @@ from charset_normalizer import from_path
 from pypinyin import pinyin, Style
 from pypinyin.contrib.tone_convert import to_initials, to_finals_tone
 import re
-import os
 from pathlib import Path
 import math
 import torch
