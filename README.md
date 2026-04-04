@@ -43,10 +43,10 @@ git submodule update --init --recursive
 
 ```bash
 # 纯音频（默认）
-uv run python src/transform_to_audio.py demo/《英雄志》（校对第1-22卷）作者：孙晓.txt
+uv run python src/transform_to_audio.py your_book.txt
 
 # 音频 + 视频（生成 MP4，完成后自动删除中间 .wav 文件）
-uv run python src/transform_to_audio.py demo/《英雄志》（校对第1-22卷）作者：孙晓.txt --video
+uv run python src/transform_to_audio.py your_book.txt --video
 
 # 指定章节范围（跳过交互式提示）
 uv run python src/transform_to_audio.py your_book.txt --range 0~8    # 第 0 到第 8 章
@@ -79,7 +79,6 @@ config.yaml               # 配置文件（TTS、音频、视频、路径等参�
 resources/                # 字体文件、参考音频
 third_party/CosyVoice/   # CosyVoice 子模块
 pretrained_models/        # 模型权重（gitignored）
-demo/                     # 示例文本文件
 ```
 
 ## 配置
