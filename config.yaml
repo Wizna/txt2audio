@@ -12,7 +12,7 @@ tts:
   # 零样本 TTS 提示文本（<|endofprompt|> 后的中文必须与 speaker_wav 中说的内容完全一致）
   prompt_text: "You are a helpful assistant.<|endofprompt|>他站在城墙上，望着远处的千军万马，脸上没有一丝慌乱。"
   # 语速：1.0=正常，<1.0=慢，>1.0=快（有声书建议 0.9~1.0，低于 0.85 会失真）
-  speed: 0.95
+  speed: 1.05
   # 句间静音填充（毫秒），增加自然停顿感（0=禁用，建议 100~200）
   inter_sentence_silence_ms: 150
 
