@@ -10,7 +10,7 @@ tts:
   # 说话人参考音频（零样本克隆的声音来源）
   speaker_wav: resources/my_speaker.wav
   # 零样本 TTS 提示文本
-  prompt_text: "You are a helpful assistant.<|endofprompt|>希望你以后能够做的比我还好呦。"
+  prompt_text: "You are a helpful assistant.<|endofprompt|>他站在城墙上，望着远处的千军万马，脸上没有一丝慌乱。"
 
 # 音频生成
 audio:
