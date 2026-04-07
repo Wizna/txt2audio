@@ -93,7 +93,7 @@ tts:
 
 audio:
   max_chars_per_clip: 6300                 # 每个音频片段的汉字上限（-1 = 不分片）
-  model_sentence_limit: 200               # TTS 模型单次输入的字符上限
+  model_sentence_limit: 2000              # TTS 模型单次输入的字符上限
 
 video:
   width: 720                               # 封面图尺寸
