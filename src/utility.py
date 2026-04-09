@@ -484,9 +484,23 @@ def cli_main_process():
             chapters_skipped += 1
 
         if args.video:
-            for i in clip_num:
-                transform_wav_to_video(number=idx, audio=f'{output_path}-{i}.wav', toc=toc[idx],
-                                       resources_dir=RESOURCES_DIR)
+            i = 1
+            while True:
+                mp4_path = f'{output_path}-{i}.mp4'
+                wav_path = f'{output_path}-{i}.wav'
+                mp3_path = f'{output_path}-{i}.mp3'
+                if os.path.isfile(mp4_path):
+                    i += 1
+                    continue
+                if os.path.isfile(wav_path):
+                    transform_wav_to_video(number=idx, audio=wav_path, toc=toc[idx],
+                                           resources_dir=RESOURCES_DIR)
+                elif os.path.isfile(mp3_path):
+                    transform_wav_to_video(number=idx, audio=mp3_path, toc=toc[idx],
+                                           resources_dir=RESOURCES_DIR)
+                else:
+                    break
+                i += 1
         elif audio_format == 'mp3':
             for i in clip_num:
                 convert_wav_to_mp3(f'{output_path}-{i}.wav', bitrate=mp3_bitrate)
