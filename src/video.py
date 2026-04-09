@@ -75,7 +75,7 @@ def create_image_from_text(number, toc, audio, resources_dir, max_w=None, max_h=
     draw_underlined_text(d, ((max_w - w) / 2, max_h - 300), f'{number}', font=number_font)
 
     result = f'{os.path.dirname(audio)}/cover.jpg'
-    img.save(result)
+    img.save(result, quality=config['video'].get('cover_jpeg_quality', 70))
     return result
 
 
@@ -85,11 +85,13 @@ def transform_wav_to_video(number, audio, toc, resources_dir):
     video_path = str(Path(audio).with_suffix('.mp4'))
     vc = config['video']
     command_line = (
-        f'ffmpeg -loop 1 -i {shlex.quote(image)} -i {shlex.quote(audio)}'
+        f'ffmpeg -y -loop 1 -i {shlex.quote(image)} -i {shlex.quote(audio)}'
+        f' -r {vc.get("ffmpeg_video_framerate", 1)}'
         f' -c:v {vc["ffmpeg_video_codec"]} -tune {vc["ffmpeg_tune"]}'
+        f' -crf {vc.get("ffmpeg_video_crf", 28)} -preset {vc.get("ffmpeg_video_preset", "medium")}'
         f' -c:a {vc["ffmpeg_audio_codec"]} -b:a {vc["ffmpeg_audio_bitrate"]}'
         f' -pix_fmt {vc["ffmpeg_pixel_format"]}'
-        f' -shortest {shlex.quote(video_path)}'
+        f' -shortest -movflags +faststart {shlex.quote(video_path)}'
     )
     print(f'the conversion command:\n {command_line}')
     ret = subprocess.run(command_line, capture_output=True, shell=True)

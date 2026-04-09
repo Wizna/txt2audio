@@ -3,6 +3,7 @@ os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
 from typing import List, Dict
 import sys
+import subprocess as _subprocess
 import argparse
 
 from charset_normalizer import from_path
@@ -70,13 +71,30 @@ def save_audio_file(wav_tensor, sample_rate, output_path: str, video_clip_index:
     torchaudio.save(audio_file_path, wav_tensor, sample_rate)
 
 
+def convert_wav_to_mp3(wav_path, bitrate='128k'):
+    """WAV → MP3，成功后删除原 WAV。"""
+    mp3_path = str(Path(wav_path).with_suffix('.mp3'))
+    ret = _subprocess.run(
+        ['ffmpeg', '-y', '-i', wav_path, '-codec:a', 'libmp3lame', '-b:a', bitrate, mp3_path],
+        capture_output=True
+    )
+    if ret.returncode == 0:
+        os.remove(wav_path)
+        return mp3_path
+    else:
+        print(f'MP3 conversion failed (code {ret.returncode}), keeping {wav_path}')
+        print(ret.stderr.decode())
+        return wav_path
+
+
 def check_export_file_exists(output_path, video_clip_index):
     """返回 True 表示需要导出（文件不存在），用于断点续生成。"""
     wav_path = f'{output_path}-{video_clip_index}.wav'
     mp4_path = f'{output_path}-{video_clip_index}.mp4'
-    export = not (os.path.isfile(wav_path) or os.path.isfile(mp4_path))
+    mp3_path = f'{output_path}-{video_clip_index}.mp3'
+    export = not (os.path.isfile(wav_path) or os.path.isfile(mp4_path) or os.path.isfile(mp3_path))
     if not export:
-        existing = mp4_path if os.path.isfile(mp4_path) else wav_path
+        existing = next(p for p in [mp4_path, mp3_path, wav_path] if os.path.isfile(p))
         print(f"{existing} is already generated !")
 
     return export
@@ -394,22 +412,21 @@ def save_table_of_contents(file_path, table_of_contents: Dict):
             f.write(w)
 
 
-import subprocess as _subprocess
-
-
 def _check_ffmpeg():
     """Check if ffmpeg is available on the system."""
     try:
         _subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
     except (FileNotFoundError, _subprocess.CalledProcessError):
-        print("❌ Error: ffmpeg not found. Please install ffmpeg to generate videos.")
+        print("❌ Error: ffmpeg not found. Please install ffmpeg.")
         print("  macOS: brew install ffmpeg")
         raise SystemExit(1)
 
 
 def cli_main_process():
     args = parse_arguments()
-    if args.video:
+    audio_format = config['audio'].get('output_format', 'mp3')
+    mp3_bitrate = config['audio'].get('mp3_bitrate', '128k')
+    if args.video or audio_format == 'mp3':
         _check_ffmpeg()
     book_file_path = args.input_file_path
     assert len(book_file_path) == 1 and '.' in book_file_path[0], "输入一个文件路径，且必须包含文件后缀"
@@ -424,7 +441,7 @@ def cli_main_process():
     # 找到最后已生成的章节，提示用户断点位置
     for idx in sorted(toc.keys(), reverse=True):
         output_path = str(OUTPUT_DIR / toc[idx])
-        if os.path.isfile(f'{output_path}-1.wav') or os.path.isfile(f'{output_path}-1.mp4'):
+        if os.path.isfile(f'{output_path}-1.wav') or os.path.isfile(f'{output_path}-1.mp4') or os.path.isfile(f'{output_path}-1.mp3'):
             print(f'Last generated chapter is {idx}: {output_path}')
             break
 
@@ -449,6 +466,9 @@ def cli_main_process():
             for i in clip_num:
                 transform_wav_to_video(number=idx, audio=f'{output_path}-{i}.wav', toc=toc[idx],
                                        resources_dir=RESOURCES_DIR)
+        elif audio_format == 'mp3':
+            for i in clip_num:
+                convert_wav_to_mp3(f'{output_path}-{i}.wav', bitrate=mp3_bitrate)
 
 
 def parse_arguments():

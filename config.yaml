@@ -22,6 +22,10 @@ audio:
   max_chars_per_clip: 6300
   # TTS 模型单次输入的字符上限（实际分句由 CosyVoice 内部 split_paragraph 处理）
   model_sentence_limit: 2000
+  # 纯音频模式的输出格式：mp3（推荐，体积小兼容好）或 wav（无压缩）
+  output_format: mp3
+  # MP3 码率（语音建议 128k，音乐建议 192k+）
+  mp3_bitrate: 128k
 
 # 视频封面
 video:
@@ -34,10 +38,15 @@ video:
   font_size_number: 40
   # FFmpeg 编码参数
   ffmpeg_video_codec: libx264
+  ffmpeg_video_crf: 28              # 静态图片容忍高 CRF（默认 23 过于保守）
+  ffmpeg_video_preset: medium       # 编码预设（静态图编码很快，可用 slow 换更好压缩）
+  ffmpeg_video_framerate: 1         # 静态封面只需 1fps
   ffmpeg_audio_codec: aac
-  ffmpeg_audio_bitrate: 192k
+  ffmpeg_audio_bitrate: 96k         # 语音 96k 足够（原 192k 浪费）
   ffmpeg_pixel_format: yuv420p
   ffmpeg_tune: stillimage
+  # 封面图 JPEG 质量（纯色背景+文字，70 足够）
+  cover_jpeg_quality: 70
 
 # 路径（相对于项目根目录）
 paths:
