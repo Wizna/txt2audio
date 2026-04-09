@@ -17,7 +17,7 @@
 
 - Python 3.11+
 - [uv](https://github.com/astral-sh/uv) — Python 包管理器
-- `ffmpeg` — 生成视频时需要
+- `ffmpeg` — 音频转 MP3 及生成视频均需要
 
 ## 快速开始
 
@@ -62,7 +62,7 @@ uv run python src/transform_to_audio.py your_book.txt --video --range all
 ## 输出结构
 
 ```
-output/{书名}/{卷名}/{章名}-{片段}.wav    # 默认（纯音频）
+output/{书名}/{卷名}/{章名}-{片段}.mp3    # 默认（纯音频，MP3 128kbps）
 output/{书名}/{卷名}/{章名}-{片段}.mp4    # 使用 --video 时
 output/{书名}/目录.txt                    # 自动生成的目录
 ```
@@ -94,11 +94,15 @@ tts:
 audio:
   max_chars_per_clip: 6300                 # 每个音频片段的汉字上限（-1 = 不分片）
   model_sentence_limit: 2000              # TTS 模型单次输入的字符上限
+  output_format: mp3                       # 纯音频输出格式：mp3 或 wav
+  mp3_bitrate: 128k                        # MP3 码率
 
 video:
   width: 720                               # 封面图尺寸
   height: 1280
-  ffmpeg_audio_bitrate: 192k               # FFmpeg 编码参数
+  ffmpeg_audio_bitrate: 96k                # 语音 96k 足够
+  ffmpeg_video_crf: 28                     # 静态封面可用高 CRF
+  ffmpeg_video_framerate: 1                # 静态封面 1fps
 
 paths:
   output_dir: output                       # 输出目录
