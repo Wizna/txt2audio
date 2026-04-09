@@ -5,6 +5,7 @@ from typing import List, Dict
 import sys
 import subprocess as _subprocess
 import argparse
+import time
 
 from charset_normalizer import from_path
 from pypinyin import pinyin, Style
@@ -422,6 +423,15 @@ def _check_ffmpeg():
         raise SystemExit(1)
 
 
+def _format_duration(seconds):
+    """秒数 -> 可读时长，如 '2h 15m 30s' 或 '45.2s'。"""
+    if seconds < 60:
+        return f'{seconds:.1f}s'
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    return f'{h}h {m}m {s}s' if h > 0 else f'{m}m {s}s'
+
+
 def cli_main_process():
     args = parse_arguments()
     audio_format = config['audio'].get('output_format', 'mp3')
@@ -453,6 +463,11 @@ def cli_main_process():
         span = parse_range_string(args.range, total=max(toc.keys()))
     else:
         span = ask_for_output_range(total=max(toc.keys()))
+    start_time = time.time()
+    chapters_generated = 0
+    chapters_skipped = 0
+    total_clips = 0
+
     for idx in span:
         if idx not in toc:
             break
@@ -462,6 +477,12 @@ def cli_main_process():
 
         clip_num = generate_audio_clip(text=''.join(contents[idx]), output_path=output_path)
 
+        if clip_num:
+            chapters_generated += 1
+            total_clips += len(clip_num)
+        else:
+            chapters_skipped += 1
+
         if args.video:
             for i in clip_num:
                 transform_wav_to_video(number=idx, audio=f'{output_path}-{i}.wav', toc=toc[idx],
@@ -469,6 +490,18 @@ def cli_main_process():
         elif audio_format == 'mp3':
             for i in clip_num:
                 convert_wav_to_mp3(f'{output_path}-{i}.wav', bitrate=mp3_bitrate)
+
+    elapsed = time.time() - start_time
+    fmt = 'mp4' if args.video else audio_format
+    out_dir = OUTPUT_DIR / book_name
+
+    print(f'\n=========== {book_name} processing complete =============')
+    print(f'  chapters generated : {chapters_generated}, skipped: {chapters_skipped}')
+    print(f'  total clips        : {total_clips}')
+    print(f'  output format      : {fmt}')
+    print(f'  output directory   : {out_dir}')
+    print(f'  time elapsed       : {_format_duration(elapsed)}')
+    print(f'============================================================')
 
 
 def parse_arguments():
