@@ -3,8 +3,8 @@ from utility import cli_main_process
 
 
 def main() -> int:
-    cli_main_process()
-    return 0
+    result = cli_main_process()
+    return result if isinstance(result, int) else 0
 
 
 if __name__ == '__main__':

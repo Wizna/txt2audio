@@ -5,7 +5,10 @@ from PIL import Image, ImageDraw, ImageFont
 import hashlib
 import re
 import os
+import logging
 from config import config
+
+logger = logging.getLogger('txt2audio')
 
 
 def draw_underlined_text(draw, pos, text, font, **options):
@@ -58,9 +61,9 @@ def create_image_from_text(number, toc, audio, resources_dir, max_w=None, max_h=
         number_font = ImageFont.truetype(str(resources_dir / 'DTM-Mono-1.otf'),
                                          int(config['video']['font_size_number'] * font_scale))
     except (OSError, IOError) as e:
-        print(f"⚠️  Warning: Could not load custom fonts from {resources_dir}")
-        print(f"Error: {e}")
-        print("Falling back to default font. Video covers will use system default.")
+        logger.warning(f"Could not load custom fonts from {resources_dir}")
+        logger.warning(f"Error: {e}")
+        logger.warning("Falling back to default font. Video covers will use system default.")
         font = ImageFont.load_default()
         smaller_font = ImageFont.load_default()
         number_font = ImageFont.load_default()
@@ -123,9 +126,9 @@ def transform_wav_to_video(number, audio, toc, resources_dir):
         command_line += f" -vf \"subtitles='{escaped_srt}':force_style='{subtitle_style}'\""
     command_line += f' -shortest -movflags +faststart {shlex.quote(tmp_video_path)}'
 
-    print(f'the conversion command:\n {command_line}')
+    logger.debug(f'ffmpeg command: {command_line}')
     ret = subprocess.run(command_line, capture_output=True, shell=True)
-    print(ret.stdout.decode())
+    logger.debug(ret.stdout.decode())
     if ret.returncode == 0:
         os.rename(tmp_video_path, video_path)
         os.remove(audio)
@@ -135,5 +138,5 @@ def transform_wav_to_video(number, audio, toc, resources_dir):
     else:
         if os.path.isfile(tmp_video_path):
             os.remove(tmp_video_path)
-        print(f'ffmpeg failed (code {ret.returncode}), keeping {audio}')
-        print(ret.stderr.decode())
+        logger.error(f'ffmpeg failed (code {ret.returncode}), keeping {audio}')
+        logger.error(ret.stderr.decode())

@@ -6,6 +6,12 @@ import sys
 import subprocess as _subprocess
 import argparse
 import time
+import logging
+import json
+
+from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn, MofNCompleteColumn
+from rich.panel import Panel
 
 from charset_normalizer import from_path
 from pypinyin import pinyin, Style
@@ -18,6 +24,9 @@ import torchaudio
 from video import transform_wav_to_video
 from subtitle import save_subtitle_file
 from config import config, PROJECT_ROOT
+
+logger = logging.getLogger('txt2audio')
+console = Console(stderr=True)
 
 RESOURCES_DIR = config['paths']['resources_dir']
 OUTPUT_DIR = config['paths']['output_dir']
@@ -44,10 +53,10 @@ def get_tts():
             _tts = AutoModel(model_dir=MODEL_DIR)
             _tts.add_zero_shot_spk(PROMPT_TEXT, SPEAKER_WAV, 'narrator')
         except Exception as e:
-            print(f"\n❌ Failed to load CosyVoice model from: {MODEL_DIR}")
-            print(f"Error: {e}")
-            print("\nPlease ensure the model is downloaded:")
-            print("  uv run python -c \"from huggingface_hub import snapshot_download; snapshot_download('FunAudioLLM/Fun-CosyVoice3-0.5B-2512', local_dir='pretrained_models/Fun-CosyVoice3-0.5B')\"")
+            logger.error(f"Failed to load CosyVoice model from: {MODEL_DIR}")
+            logger.error(f"Error: {e}")
+            logger.error("Please ensure the model is downloaded:")
+            logger.error("  uv run python -c \"from huggingface_hub import snapshot_download; snapshot_download('FunAudioLLM/Fun-CosyVoice3-0.5B-2512', local_dir='pretrained_models/Fun-CosyVoice3-0.5B')\"")
             raise SystemExit(1)
     return _tts
 
@@ -90,8 +99,8 @@ def convert_wav_to_mp3(wav_path, bitrate='128k'):
     else:
         if os.path.isfile(tmp_path):
             os.remove(tmp_path)
-        print(f'MP3 conversion failed (code {ret.returncode}), keeping {wav_path}')
-        print(ret.stderr.decode())
+        logger.warning(f'MP3 conversion failed (code {ret.returncode}), keeping {wav_path}')
+        logger.warning(ret.stderr.decode())
         return wav_path
 
 
@@ -104,15 +113,15 @@ def check_export_file_exists(output_path, video_clip_index):
         tmp = base + ext
         if os.path.isfile(tmp):
             os.remove(tmp)
-            print(f"Removed incomplete temp file: {tmp}")
+            logger.debug(f"Removed incomplete temp file: {tmp}")
     # 检查已完成的文件
     for path in (base + '.mp4', base + '.mp3', base + '.wav'):
         if os.path.isfile(path):
             if os.path.getsize(path) == 0:
                 os.remove(path)
-                print(f"Removed empty file: {path}")
+                logger.debug(f"Removed empty file: {path}")
                 continue
-            print(f"{path} is already generated !")
+            logger.debug(f"{path} is already generated !")
             return False
     return True
 
@@ -439,7 +448,7 @@ def save_table_of_contents(file_path, table_of_contents: Dict):
     with open(file_path, 'w', encoding='utf-8') as f:
         for k, v in table_of_contents.items():
             w = f'{k:>5}:{v} \n'
-            print(w)
+            logger.debug(w.rstrip())
             f.write(w)
 
 
@@ -448,8 +457,8 @@ def _check_ffmpeg():
     try:
         _subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
     except (FileNotFoundError, _subprocess.CalledProcessError):
-        print("❌ Error: ffmpeg not found. Please install ffmpeg.")
-        print("  macOS: brew install ffmpeg")
+        logger.error("ffmpeg not found. Please install ffmpeg.")
+        logger.error("  macOS: brew install ffmpeg")
         raise SystemExit(1)
 
 
@@ -462,8 +471,79 @@ def _format_duration(seconds):
     return f'{h}h {m}m {s}s' if h > 0 else f'{m}m {s}s'
 
 
+def _apply_config_overrides(args):
+    """将 CLI 传入的配置覆盖应用到全局 config，并刷新模块级常量。"""
+    global OUTPUT_DIR, SPEED, INTER_SENTENCE_SILENCE_MS, MAX_CHARS_PER_CLIP
+
+    if args.speed is not None:
+        config['tts']['speed'] = args.speed
+    if args.output_format is not None:
+        config['audio']['output_format'] = args.output_format
+    if args.output_dir is not None:
+        config['paths']['output_dir'] = Path(args.output_dir).resolve()
+
+    for override in args.set:
+        key, _, value = override.partition('=')
+        if not value and not _:
+            logger.warning(f"Ignoring malformed --set: {override} (expected KEY=VALUE)")
+            continue
+        parts = key.split('.')
+        d = config
+        for p in parts[:-1]:
+            d = d[p]
+        existing = d.get(parts[-1])
+        if isinstance(existing, bool):
+            value = value.lower() in ('true', '1', 'yes')
+        elif isinstance(existing, int):
+            value = int(value)
+        elif isinstance(existing, float):
+            value = float(value)
+        d[parts[-1]] = value
+
+    # 刷新模块级常量
+    OUTPUT_DIR = config['paths']['output_dir']
+    SPEED = config['tts'].get('speed', 1.0)
+    INTER_SENTENCE_SILENCE_MS = config['tts'].get('inter_sentence_silence_ms', 0)
+    MAX_CHARS_PER_CLIP = config['audio']['max_chars_per_clip']
+
+
+def _json_error(error_code, message):
+    """输出 JSON 格式的错误信息到 stdout。"""
+    print(json.dumps({"status": "error", "error": error_code, "message": message}))
+
+
+def _report_error(args, error_code, message):
+    """错误输出：JSON 模式写 stdout，人类模式写 stderr rich 格式。"""
+    if args.json:
+        _json_error(error_code, message)
+    else:
+        console.print(f"[bold red]Error:[/bold red] {message}")
+
+
 def cli_main_process():
     args = parse_arguments()
+
+    # logging 仅用于库级代码（video.py 等）的 warning/error
+    from rich.logging import RichHandler
+    if args.json:
+        logging.basicConfig(level=logging.WARNING, stream=sys.stderr, format='%(message)s')
+    else:
+        logging.basicConfig(level=logging.WARNING,
+                            handlers=[RichHandler(console=console, show_time=False, show_path=False)])
+
+    # 应用 CLI 配置覆盖
+    _apply_config_overrides(args)
+
+    # --dump-config: 输出当前生效配置后退出
+    if args.dump_config:
+        import yaml
+        serializable = json.loads(json.dumps(config, default=str))
+        if args.json:
+            print(json.dumps(serializable, ensure_ascii=False, indent=2))
+        else:
+            yaml.dump(serializable, sys.stdout, allow_unicode=True, default_flow_style=False)
+        return 0
+
     audio_format = config['audio'].get('output_format', 'mp3')
     mp3_bitrate = config['audio'].get('mp3_bitrate', '128k')
     if args.landscape:
@@ -471,12 +551,17 @@ def cli_main_process():
     if args.video or audio_format == 'mp3':
         _check_ffmpeg()
     book_file_path = args.input_file_path
-    assert len(book_file_path) == 1 and '.' in book_file_path[0], "输入一个文件路径，且必须包含文件后缀"
+    if len(book_file_path) != 1 or '.' not in book_file_path[0]:
+        _report_error(args, "invalid_args", "输入一个文件路径，且必须包含文件后缀")
+        return 1
     book_name = Path(book_file_path[0]).stem
     if not os.path.isfile(book_file_path[0]):
-        print("输入的文件路径不是一个文件，请检查文件路径！")
-        return
-    print(f'=========== start processing {book_name} =============')
+        _report_error(args, "file_not_found", f"文件不存在: {book_file_path[0]}")
+        return 1
+
+    if not args.json:
+        console.print(f"\n[bold]{book_name}[/bold]")
+
     raw_data = load_txt_file(book_file_path[0])
     toc, contents = construct_text_and_name(raw_data=raw_data, book_name=book_name)
 
@@ -484,84 +569,155 @@ def cli_main_process():
     for idx in sorted(toc.keys(), reverse=True):
         output_path = str(OUTPUT_DIR / toc[idx])
         if os.path.isfile(f'{output_path}-1.wav') or os.path.isfile(f'{output_path}-1.mp4') or os.path.isfile(f'{output_path}-1.mp3'):
-            print(f'Last generated chapter is {idx}: {output_path}')
+            if not args.json:
+                console.print(f"  [dim]上次生成到第 {idx} 章[/dim]")
             break
 
     if not toc:
-        print("未解析到任何章节，请检查文件内容！")
-        return
+        _report_error(args, "no_chapters", "未解析到任何章节，请检查文件内容")
+        return 1
 
     if args.range is not None:
         span = parse_range_string(args.range, total=max(toc.keys()))
     else:
         span = ask_for_output_range(total=max(toc.keys()))
+
+    # 预计算章节列表（保留遇到空隙即停止的行为）
+    chapter_indices = []
+    for idx in span:
+        if idx not in toc:
+            break
+        chapter_indices.append(idx)
+
     start_time = time.time()
     chapters_generated = 0
     chapters_skipped = 0
     total_clips = 0
+    show_progress = not args.json and not args.quiet
 
-    for idx in span:
-        if idx not in toc:
-            break
-        output_path = str(OUTPUT_DIR / toc[idx])
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        MofNCompleteColumn(),
+        TimeRemainingColumn(),
+        console=console,
+        disable=not show_progress,
+    ) as progress:
+        task = progress.add_task("准备中...", total=len(chapter_indices))
 
-        Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
+        for idx in chapter_indices:
+            chapter_title = toc[idx].split('/')[-1]
+            progress.update(task, description=f"[cyan]{chapter_title}[/cyan]")
 
-        clip_num = generate_audio_clip(text=''.join(contents[idx]), output_path=output_path)
+            output_path = str(OUTPUT_DIR / toc[idx])
+            Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
 
-        if clip_num:
-            chapters_generated += 1
-            total_clips += len(clip_num)
-        else:
-            chapters_skipped += 1
+            clip_num = generate_audio_clip(text=''.join(contents[idx]), output_path=output_path)
 
-        if args.video:
-            i = 1
-            while True:
-                mp4_path = f'{output_path}-{i}.mp4'
-                wav_path = f'{output_path}-{i}.wav'
-                mp3_path = f'{output_path}-{i}.mp3'
-                if os.path.isfile(mp4_path):
+            if clip_num:
+                chapters_generated += 1
+                total_clips += len(clip_num)
+            else:
+                chapters_skipped += 1
+
+            if args.video:
+                i = 1
+                while True:
+                    mp4_path = f'{output_path}-{i}.mp4'
+                    wav_path = f'{output_path}-{i}.wav'
+                    mp3_path = f'{output_path}-{i}.mp3'
+                    if os.path.isfile(mp4_path):
+                        i += 1
+                        continue
+                    if os.path.isfile(wav_path):
+                        transform_wav_to_video(number=idx, audio=wav_path, toc=toc[idx],
+                                               resources_dir=RESOURCES_DIR)
+                    elif os.path.isfile(mp3_path):
+                        transform_wav_to_video(number=idx, audio=mp3_path, toc=toc[idx],
+                                               resources_dir=RESOURCES_DIR)
+                    else:
+                        break
                     i += 1
-                    continue
-                if os.path.isfile(wav_path):
-                    transform_wav_to_video(number=idx, audio=wav_path, toc=toc[idx],
-                                           resources_dir=RESOURCES_DIR)
-                elif os.path.isfile(mp3_path):
-                    transform_wav_to_video(number=idx, audio=mp3_path, toc=toc[idx],
-                                           resources_dir=RESOURCES_DIR)
-                else:
-                    break
-                i += 1
-        elif audio_format == 'mp3':
-            for i in clip_num:
-                convert_wav_to_mp3(f'{output_path}-{i}.wav', bitrate=mp3_bitrate)
+            elif audio_format == 'mp3':
+                for i in clip_num:
+                    convert_wav_to_mp3(f'{output_path}-{i}.wav', bitrate=mp3_bitrate)
+
+            progress.advance(task)
 
     elapsed = time.time() - start_time
     fmt = 'mp4' if args.video else audio_format
     out_dir = OUTPUT_DIR / book_name
 
-    print(f'\n=========== {book_name} processing complete =============')
-    print(f'  chapters generated : {chapters_generated}, skipped: {chapters_skipped}')
-    print(f'  total clips        : {total_clips}')
-    print(f'  output format      : {fmt}')
-    print(f'  output directory   : {out_dir}')
-    print(f'  time elapsed       : {_format_duration(elapsed)}')
-    print(f'============================================================')
+    if args.json:
+        result = {
+            "status": "success",
+            "book_name": book_name,
+            "chapters_generated": chapters_generated,
+            "chapters_skipped": chapters_skipped,
+            "total_clips": total_clips,
+            "output_format": fmt,
+            "output_directory": str(out_dir),
+            "elapsed_seconds": round(elapsed, 1),
+        }
+        print(json.dumps(result, ensure_ascii=False))
+    else:
+        summary = (
+            f"[green]章节[/green]  {chapters_generated} 已生成, {chapters_skipped} 跳过\n"
+            f"[green]片段[/green]  {total_clips}\n"
+            f"[green]格式[/green]  {fmt}\n"
+            f"[green]输出[/green]  {out_dir}\n"
+            f"[green]耗时[/green]  {_format_duration(elapsed)}"
+        )
+        console.print(Panel(summary, title="[bold green]完成[/bold green]", border_style="green"))
+    return 0
 
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(description='Read a text book and transform to an audio book.')
-    parser.add_argument('input_file_path', metavar='input_file_path', type=str, nargs=1,
-                        help='path to the text book (absolute or relative)')
+    parser = argparse.ArgumentParser(
+        prog='txt2audio',
+        description='Convert Chinese text novels to audiobooks using CosyVoice TTS.',
+        epilog='Examples:\n'
+               '  txt2audio novel.txt --range all\n'
+               '  txt2audio novel.txt --video --range 0~8 --json\n'
+               '  txt2audio novel.txt --range all --speed 0.95 --set audio.mp3_bitrate=192k\n'
+               '  txt2audio --dump-config --json\n',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument('input_file_path', metavar='input_file_path', type=str, nargs='?',
+                        help='path to the text book (required unless --dump-config)')
     parser.add_argument('--video', action='store_true',
                         help='generate MP4 video with cover image (default: audio only)')
     parser.add_argument('--landscape', action='store_true',
                         help='use landscape (horizontal) video orientation (overrides config)')
     parser.add_argument('--range', type=str, default=None,
                         help='chapter range, e.g. "all", "8", "0~8" (skips interactive prompt)')
+    parser.add_argument('--json', action='store_true',
+                        help='output result as JSON to stdout (machine-readable)')
+    parser.add_argument('--quiet', '-q', action='store_true',
+                        help='suppress progress output, only show errors')
+    parser.add_argument('--speed', type=float, default=None,
+                        help='TTS speed override (e.g. 0.95)')
+    parser.add_argument('--output-format', type=str, choices=['mp3', 'wav'], default=None,
+                        help='audio output format override')
+    parser.add_argument('--output-dir', type=str, default=None,
+                        help='output directory override')
+    parser.add_argument('--set', action='append', metavar='KEY=VALUE', default=[],
+                        help='override any config.yaml value, e.g. --set tts.speed=0.9')
+    parser.add_argument('--dump-config', action='store_true',
+                        help='print effective config as YAML (or JSON with --json) and exit')
 
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    # nargs='?' 返回标量或 None，统一包装为列表以兼容下游代码
+    if args.input_file_path is not None:
+        args.input_file_path = [args.input_file_path]
+    elif not args.dump_config:
+        parser.error('input_file_path is required unless --dump-config is used')
+    else:
+        args.input_file_path = []
+
+    return args
 
 
 def parse_range_string(var, total):
@@ -569,7 +725,8 @@ def parse_range_string(var, total):
         return range(total + 1)
     else:
         indices = re.split('[~-]', var)
-        assert len(indices) in (1, 2), "请输入单个数字或者一个范围, e.g. 8 or 0~8"
+        if len(indices) not in (1, 2):
+            raise ValueError("请输入单个数字或者一个范围, e.g. 8 or 0~8")
         if len(indices) == 1:
             s = int(indices[0])
             return range(s, s + 1)
@@ -580,5 +737,7 @@ def parse_range_string(var, total):
 
 
 def ask_for_output_range(total):
+    if not sys.stdin.isatty():
+        return range(total + 1)
     var = input("请输入转换范围, (all 表示全部): \n")
     return parse_range_string(var, total)

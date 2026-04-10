@@ -59,26 +59,59 @@ git submodule update --init --recursive
 **基本用法：**
 
 ```bash
-uv run python src/transform_to_audio.py your_book.txt                # 纯音频（默认）
-uv run python src/transform_to_audio.py your_book.txt --video        # 音频 + 视频（MP4）
+uv run txt2audio your_book.txt --range all              # 纯音频（默认 MP3）
+uv run txt2audio your_book.txt --video --range all      # 音频 + 视频（MP4）
 ```
 
-**指定章节范围**（跳过交互式提示）：
+**指定章节范围：**
 
 ```bash
-uv run python src/transform_to_audio.py your_book.txt --range 0~8   # 第 0 到第 8 章
-uv run python src/transform_to_audio.py your_book.txt --range 5     # 仅第 5 章
-uv run python src/transform_to_audio.py your_book.txt --range all   # 全部章节
+uv run txt2audio your_book.txt --range 0~8              # 第 0 到第 8 章
+uv run txt2audio your_book.txt --range 5                # 仅第 5 章
+```
+
+**运行时覆盖配置：**
+
+```bash
+uv run txt2audio your_book.txt --range all --speed 0.95 --output-format wav
+uv run txt2audio your_book.txt --range all --set tts.speed=0.9 --set audio.mp3_bitrate=192k
 ```
 
 **组合示例：**
 
 ```bash
-# 全书 + 横屏视频
-uv run python src/transform_to_audio.py your_book.txt --video --landscape --range all
+uv run txt2audio your_book.txt --video --landscape --range all
 ```
 
-> 不带 `--range` 时会交互式提示选择章节范围。
+> 不带 `--range` 时，交互模式会提示选择范围；非交互模式（如管道/脚本）自动处理全部章节。
+
+### AI / Agent 集成
+
+```bash
+# JSON 结构化输出（stdout 为 JSON，进度信息走 stderr）
+uv run txt2audio your_book.txt --range all --json
+
+# 查看当前生效配置
+uv run txt2audio --dump-config --json
+
+# 静默模式（仅输出错误）
+uv run txt2audio your_book.txt --range all --quiet
+```
+
+退出码：`0` 成功，`1` 失败。`--json` 模式输出示例：
+
+```json
+{
+  "status": "success",
+  "book_name": "三体",
+  "chapters_generated": 8,
+  "chapters_skipped": 0,
+  "total_clips": 24,
+  "output_format": "mp3",
+  "output_directory": "output/三体",
+  "elapsed_seconds": 120.5
+}
+```
 
 ## 输出结构
 
