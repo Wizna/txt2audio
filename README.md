@@ -116,10 +116,26 @@ txt2audio/
 
 ```yaml
 tts:
-  speaker_wav: resources/my_speaker.wav    # 换声音：替换参考音频文件
-  prompt_text: "..."                       # 零样本 TTS 提示文本
   model_dir: pretrained_models/Fun-CosyVoice3-0.5B
+  speaker_wav: resources/my_speaker.wav    # 说话人参考音频（声音克隆来源）
+  prompt_text: "..."                       # 零样本 TTS 提示文本
+  speed: 1.05                              # 语速（有声书建议 0.9~1.0）
+  inter_sentence_silence_ms: 150           # 句间静音（毫秒，0=禁用）
 ```
+
+#### 自定义声音（声音克隆）
+
+1. 准备一段清晰、无噪音的参考音频（建议 5~15 秒）
+2. 放入 `resources/` 目录
+3. 修改 `config.yaml` 中的 `speaker_wav` 和 `prompt_text`：
+
+```yaml
+tts:
+  speaker_wav: resources/my_speaker.wav
+  prompt_text: "You are a helpful assistant.<|endofprompt|>参考音频中说的原文。"
+```
+
+> **注意：** `<|endofprompt|>` 后面的文本必须与参考音频内容**逐字一致**，否则音色提取会失败。
 
 </details>
 
@@ -162,20 +178,6 @@ paths:
 ```
 
 </details>
-
-### 自定义声音（声音克隆）
-
-1. 准备一段清晰、无噪音的参考音频（建议 5~15 秒）
-2. 放入 `resources/` 目录
-3. 修改 `config.yaml`：
-
-```yaml
-tts:
-  speaker_wav: resources/my_speaker.wav
-  prompt_text: "You are a helpful assistant.<|endofprompt|>参考音频中说的原文。"
-```
-
-> **注意：** `<|endofprompt|>` 后面的文本必须与参考音频内容**逐字一致**，否则音色提取会失败。
 
 ## 注意事项
 
