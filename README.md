@@ -14,6 +14,7 @@
 - 可选生成 MP4 视频（带自动生成的封面图）
 - 支持横屏/竖屏视频（`--landscape` 或 `config.yaml` 中设置）
 - 可选内嵌字幕 —— 自动生成句级 SRT 字幕并烧入视频
+- 声音克隆 —— 提供一段参考音频即可用该声音朗读全书
 
 ## 环境要求
 
@@ -119,6 +120,18 @@ paths:
 ```
 
 所有路径均相对于项目根目录。完整配置项及说明见 `config.yaml`。
+
+### 自定义声音（声音克隆）
+
+准备一段清晰、无噪音的参考音频（建议 5~15 秒），放入 `resources/` 目录，然后修改 `config.yaml`：
+
+```yaml
+tts:
+  speaker_wav: resources/my_speaker.wav          # 替换为你的参考音频
+  prompt_text: "You are a helpful assistant.<|endofprompt|>参考音频中说的原文。"
+```
+
+> **注意：** `<|endofprompt|>` 后面的文本必须与参考音频内容**逐字一致**，否则音色提取会失败。
 
 ## 注意事项
 
