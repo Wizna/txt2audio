@@ -16,6 +16,7 @@ import math
 import torch
 import torchaudio
 from video import transform_wav_to_video
+from subtitle import save_subtitle_file
 from config import config, PROJECT_ROOT
 
 RESOURCES_DIR = config['paths']['resources_dir']
@@ -67,42 +68,58 @@ def save_audio_file(wav_tensor, sample_rate, output_path: str, video_clip_index:
         return
     export_indices.append(video_clip_index)
     audio_file_path = f'{output_path}-{video_clip_index}.wav'
+    tmp_path = audio_file_path + '.tmp'
     if wav_tensor.dim() == 1:
         wav_tensor = wav_tensor.unsqueeze(0)
-    torchaudio.save(audio_file_path, wav_tensor, sample_rate)
+    torchaudio.save(tmp_path, wav_tensor, sample_rate)
+    os.rename(tmp_path, audio_file_path)
 
 
 def convert_wav_to_mp3(wav_path, bitrate='128k'):
-    """WAV → MP3，成功后删除原 WAV。"""
+    """WAV → MP3，成功后删除原 WAV。使用临时文件确保原子写入。"""
     mp3_path = str(Path(wav_path).with_suffix('.mp3'))
+    tmp_path = mp3_path + '.tmp'
     ret = _subprocess.run(
-        ['ffmpeg', '-y', '-i', wav_path, '-codec:a', 'libmp3lame', '-b:a', bitrate, mp3_path],
+        ['ffmpeg', '-y', '-i', wav_path, '-codec:a', 'libmp3lame', '-b:a', bitrate, tmp_path],
         capture_output=True
     )
     if ret.returncode == 0:
+        os.rename(tmp_path, mp3_path)
         os.remove(wav_path)
         return mp3_path
     else:
+        if os.path.isfile(tmp_path):
+            os.remove(tmp_path)
         print(f'MP3 conversion failed (code {ret.returncode}), keeping {wav_path}')
         print(ret.stderr.decode())
         return wav_path
 
 
 def check_export_file_exists(output_path, video_clip_index):
-    """返回 True 表示需要导出（文件不存在），用于断点续生成。"""
-    wav_path = f'{output_path}-{video_clip_index}.wav'
-    mp4_path = f'{output_path}-{video_clip_index}.mp4'
-    mp3_path = f'{output_path}-{video_clip_index}.mp3'
-    export = not (os.path.isfile(wav_path) or os.path.isfile(mp4_path) or os.path.isfile(mp3_path))
-    if not export:
-        existing = next(p for p in [mp4_path, mp3_path, wav_path] if os.path.isfile(p))
-        print(f"{existing} is already generated !")
-
-    return export
+    """返回 True 表示需要导出（文件不存在），用于断点续生成。
+    自动清理中断留下的临时文件和空文件。"""
+    base = f'{output_path}-{video_clip_index}'
+    # 清理中断留下的临时文件
+    for ext in ('.wav.tmp', '.mp3.tmp', '.mp4.tmp'):
+        tmp = base + ext
+        if os.path.isfile(tmp):
+            os.remove(tmp)
+            print(f"Removed incomplete temp file: {tmp}")
+    # 检查已完成的文件
+    for path in (base + '.mp4', base + '.mp3', base + '.wav'):
+        if os.path.isfile(path):
+            if os.path.getsize(path) == 0:
+                os.remove(path)
+                print(f"Removed empty file: {path}")
+                continue
+            print(f"{path} is already generated !")
+            return False
+    return True
 
 
 def generate_audio_clip(text: str, output_path: str, sample_rate=None):
-    """将一章文本转为音频，按 MAX_CHARS_PER_CLIP 切分为多个片段（-1 则不分片）。"""
+    """将一章文本转为音频，按 MAX_CHARS_PER_CLIP 切分为多个片段（-1 则不分片）。
+    同时收集句级时间戳，生成 SRT 字幕文件。"""
     cosyvoice = get_tts()
     if sample_rate is None:
         sample_rate = cosyvoice.sample_rate
@@ -111,6 +128,8 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=None):
     video_clip_index = 1
     exported_clip_indices = []
     wav_chunks = []
+    subtitle_entries = []
+    current_time = 0.0
     sentences = annotate_polyphones(text)
     sentences = mask_punctuations(text=sentences)
     export = check_export_file_exists(output_path=output_path, video_clip_index=video_clip_index)
@@ -121,25 +140,36 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=None):
 
     for processed_sentences in split_long_sentences(sentences):
         if export:
+            sentence_start = current_time
             if silence is not None and wav_chunks:
                 wav_chunks.append(silence)
+                current_time += INTER_SENTENCE_SILENCE_MS / 1000
+                sentence_start = current_time
             for chunk in cosyvoice.inference_zero_shot(
                 processed_sentences, PROMPT_TEXT, SPEAKER_WAV,
                 zero_shot_spk_id='narrator', stream=False, speed=SPEED
             ):
                 wav_chunks.append(chunk['tts_speech'])
+                current_time += chunk['tts_speech'].shape[-1] / sample_rate
+            subtitle_entries.append((sentence_start, current_time, processed_sentences))
         word_count += get_word_num(text=processed_sentences)
 
         if MAX_CHARS_PER_CLIP > 0 and word_count > MAX_CHARS_PER_CLIP:
             combined = torch.cat(wav_chunks, dim=-1) if wav_chunks else None
             save_audio_file(combined, sample_rate, output_path, video_clip_index, exported_clip_indices)
+            if export and subtitle_entries:
+                save_subtitle_file(subtitle_entries, output_path, video_clip_index)
             video_clip_index += 1
             wav_chunks = []
             word_count = 0
+            subtitle_entries = []
+            current_time = 0.0
             export = check_export_file_exists(output_path=output_path, video_clip_index=video_clip_index)
 
     combined = torch.cat(wav_chunks, dim=-1) if wav_chunks else None
     save_audio_file(combined, sample_rate, output_path, video_clip_index, exported_clip_indices)
+    if export and subtitle_entries:
+        save_subtitle_file(subtitle_entries, output_path, video_clip_index)
     return exported_clip_indices
 
 
@@ -436,6 +466,8 @@ def cli_main_process():
     args = parse_arguments()
     audio_format = config['audio'].get('output_format', 'mp3')
     mp3_bitrate = config['audio'].get('mp3_bitrate', '128k')
+    if args.landscape:
+        config['video']['orientation'] = 'landscape'
     if args.video or audio_format == 'mp3':
         _check_ffmpeg()
     book_file_path = args.input_file_path
@@ -524,6 +556,8 @@ def parse_arguments():
                         help='path to the text book (absolute or relative)')
     parser.add_argument('--video', action='store_true',
                         help='generate MP4 video with cover image (default: audio only)')
+    parser.add_argument('--landscape', action='store_true',
+                        help='use landscape (horizontal) video orientation (overrides config)')
     parser.add_argument('--range', type=str, default=None,
                         help='chapter range, e.g. "all", "8", "0~8" (skips interactive prompt)')
 

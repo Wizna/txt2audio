@@ -9,9 +9,11 @@
 - 自动识别卷/章结构（支持序、楔子、后记等特殊章节）
 - 自动检测文件编码
 - 多音字智能标注 —— 使用 `pypinyin` 根据上下文为多音字（如 的/得/地、为/wéi/wèi）添加拼音标注，提升语音合成准确度
-- 断点续生成 —— 跳过已有的音频/视频文件
+- 断点续生成 —— 原子写入（先写临时文件再重命名），中断不会产生损坏文件，自动清理残留
 - 每个音频片段约 30 分钟（6300 汉字）
 - 可选生成 MP4 视频（带自动生成的封面图）
+- 支持横屏/竖屏视频（`--landscape` 或 `config.yaml` 中设置）
+- 可选内嵌字幕 —— 自动生成句级 SRT 字幕并烧入视频
 
 ## 环境要求
 
@@ -53,6 +55,9 @@ uv run python src/transform_to_audio.py your_book.txt --range 0~8    # 第 0 到
 uv run python src/transform_to_audio.py your_book.txt --range 5      # 仅第 5 章
 uv run python src/transform_to_audio.py your_book.txt --range all    # 全部章节
 
+# 横屏视频
+uv run python src/transform_to_audio.py your_book.txt --video --landscape
+
 # 组合使用
 uv run python src/transform_to_audio.py your_book.txt --video --range all
 ```
@@ -64,6 +69,7 @@ uv run python src/transform_to_audio.py your_book.txt --video --range all
 ```
 output/{书名}/{卷名}/{章名}-{片段}.mp3    # 默认（纯音频，MP3 128kbps）
 output/{书名}/{卷名}/{章名}-{片段}.mp4    # 使用 --video 时
+output/{书名}/{卷名}/{章名}-{片段}.srt    # 中间字幕文件（烧入视频后自动删除）
 output/{书名}/目录.txt                    # 自动生成的目录
 ```
 
@@ -74,6 +80,7 @@ src/
   transform_to_audio.py   # 入口
   utility.py              # 文本解析、音频生成、CLI 逻辑
   video.py                # 封面图生成、ffmpeg 转视频
+  subtitle.py             # SRT 字幕生成
   config.py               # 配置加载
 config.yaml               # 配置文件（TTS、音频、视频、路径等参数）
 resources/                # 字体文件、参考音频
@@ -98,11 +105,14 @@ audio:
   mp3_bitrate: 128k                        # MP3 码率
 
 video:
+  orientation: portrait                    # portrait (竖屏) | landscape (横屏)
   width: 720                               # 封面图尺寸
   height: 1280
+  subtitles: false                         # 是否烧入字幕
+  subtitle_style: "FontSize=22,..."        # ASS 字幕样式
   ffmpeg_audio_bitrate: 96k                # 语音 96k 足够
   ffmpeg_video_crf: 28                     # 静态封面可用高 CRF
-  ffmpeg_video_framerate: 1                # 静态封面 1fps
+  ffmpeg_video_framerate: 1                # 静态封面 1fps（字幕模式自动提升到 10fps）
 
 paths:
   output_dir: output                       # 输出目录

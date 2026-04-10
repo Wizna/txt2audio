@@ -29,6 +29,8 @@ audio:
 
 # 视频封面
 video:
+  # 画面方向：portrait (竖屏 720x1280) | landscape (横屏 1280x720)
+  orientation: portrait
   # 封面图尺寸（像素）
   width: 720
   height: 1280
@@ -47,6 +49,9 @@ video:
   ffmpeg_tune: stillimage
   # 封面图 JPEG 质量（纯色背景+文字，70 足够）
   cover_jpeg_quality: 70
+  # 字幕设置（仅 --video 模式生效）
+  subtitles: false                    # 是否烧入字幕
+  subtitle_style: "FontSize=22,PrimaryColour=&Hffffff,Alignment=2,MarginV=40"
 
 # 路径（相对于项目根目录）
 paths:
