@@ -2,13 +2,15 @@
 
 > 将网络小说转换成有声书（主要是为了保护我的眼睛）
 
-将 `.txt` 格式的中文小说转换为有声书。使用 [Fun-CosyVoice3-0.5B](https://github.com/FunAudioLLM/CosyVoice) 进行零样本语音合成（zero-shot TTS），支持生成带封面的 MP4 视频。
+将中文小说转换为有声书，支持 `.txt`、`.epub`、`.mobi` 输入。使用 [Fun-CosyVoice3-0.5B](https://github.com/FunAudioLLM/CosyVoice) 进行零样本语音合成（zero-shot TTS），支持生成带封面的 MP4 视频。
 
 ## 功能特性
 
 - **智能文本处理**
+  - 支持 `.txt`、`.epub`、`.mobi` 输入
   - 自动识别卷/章结构（支持序、楔子、后记等特殊章节）
   - 自动检测文件编码
+  - `epub` / `mobi` 自动转换为可复用的 `.txt2audio.txt`
   - 三层文本预处理，各层各司其职：
     - 小说专用标点清洗 —— 破折号、省略号、引号、URL 等
     - `wetext` 文本归一化 —— 数字/符号自动转口语形式
@@ -29,7 +31,8 @@
 |------|------|
 | Python 3.11+ | 见 `.python-version` |
 | [uv](https://github.com/astral-sh/uv) | Python 包管理器 |
-| `ffmpeg` | 音频转 MP3 及生成视频均需要 |
+| `ffmpeg`（可选） | 输出 MP3 或生成视频时需要；仅输出 WAV 时不需要 |
+| `ebook-convert`（Calibre，可选） | 输入为 `epub` / `mobi` 时需要；输入为 `.txt` 时不需要 |
 
 ## 快速开始
 
@@ -44,6 +47,13 @@ uv sync
 # 3. 下载预训练模型（约 1GB）
 uv run python -c "from huggingface_hub import snapshot_download; snapshot_download('FunAudioLLM/Fun-CosyVoice3-0.5B-2512', local_dir='pretrained_models/Fun-CosyVoice3-0.5B')"
 ```
+
+按需安装系统依赖：
+
+- `ffmpeg`：仅当你需要输出 MP3，或使用 `--video` 生成 MP4 时安装
+- `ebook-convert`（Calibre）：仅当你要处理 `epub` / `mobi` 输入时安装
+
+不同系统的安装方式不同，请使用各自平台对应的包管理器或安装器。
 
 <details>
 <summary>已克隆但没有拉取子模块？</summary>
@@ -60,8 +70,12 @@ git submodule update --init --recursive
 
 ```bash
 uv run txt2audio your_book.txt --range all              # 纯音频（默认 MP3）
+uv run txt2audio your_book.epub --range all             # 首次会先生成 your_book.txt2audio.txt
+uv run txt2audio your_book.mobi --range all             # 首次会先生成 your_book.txt2audio.txt
 uv run txt2audio your_book.txt --video --range all      # 音频 + 视频（MP4）
 ```
+
+`epub` / `mobi` 输入会先调用 Calibre 的 `ebook-convert`，在原书文件同目录生成 `*.txt2audio.txt`。后续再次运行时会优先复用这个文本文件，因此你可以先手动修正文稿，再继续使用原始电子书路径执行转换。若输入本身就是 `.txt`，则不需要安装 Calibre。
 
 **指定章节范围：**
 
@@ -109,6 +123,7 @@ uv run txt2audio your_book.txt --range all --quiet
   "total_clips": 24,
   "output_format": "mp3",
   "output_directory": "output/三体",
+  "source_text_file": "/path/to/三体.txt2audio.txt",
   "elapsed_seconds": 120.5
 }
 ```
@@ -138,6 +153,13 @@ txt2audio/
 ├── resources/                             # 字体文件、参考音频
 ├── third_party/CosyVoice/                 # CosyVoice 子模块
 └── pretrained_models/                     # 模型权重（gitignored）
+```
+
+对于 `epub` / `mobi` 输入，程序还会在原书文件同目录生成一个可编辑的中间文本文件：
+
+```text
+your_book.epub
+your_book.txt2audio.txt
 ```
 
 ## 配置
@@ -219,3 +241,5 @@ paths:
 
 - Apple Silicon (M1/M2) 上 0.5B 模型 CPU 推理约需 16GB 内存
 - macOS ARM 上 WeTextProcessing 可能存在编译问题，项目使用 `wetext` 替代
+- 输出 MP3 或生成视频时依赖 `ffmpeg`；若只输出 WAV，则不需要安装
+- `epub` / `mobi` 输入依赖 Calibre 的 `ebook-convert`；若未安装，程序会直接报错提示

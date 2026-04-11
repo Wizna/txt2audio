@@ -8,6 +8,7 @@ import argparse
 import time
 import logging
 import json
+import shutil
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn, MofNCompleteColumn
@@ -61,11 +62,66 @@ def get_tts():
     return _tts
 
 book_delimiter = config['text_processing']['book_delimiter']
+SUPPORTED_INPUT_SUFFIXES = {'.txt', '.epub', '.mobi'}
+CONVERTED_TEXT_SUFFIX = '.txt2audio.txt'
 
 
 def load_txt_file(file_path):
     results = from_path(file_path)  # 自动检测文件编码
     return str(results.best())
+
+
+def get_converted_txt_path(file_path: str) -> Path:
+    source = Path(file_path)
+    return source.with_name(f'{source.stem}{CONVERTED_TEXT_SUFFIX}')
+
+
+def convert_book_to_txt(file_path: str, output_txt_path: Path) -> Path:
+    tmp_path = output_txt_path.with_suffix(output_txt_path.suffix + '.tmp')
+    if tmp_path.exists():
+        tmp_path.unlink()
+    output_txt_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if shutil.which('ebook-convert') is None:
+        raise RuntimeError(
+            "检测到 EPUB/MOBI 输入，但系统未安装 Calibre 的 `ebook-convert`。"
+            " 请先安装 Calibre，并确保 `ebook-convert` 已加入 PATH。"
+        )
+
+    ret = _subprocess.run(
+        ['ebook-convert', file_path, str(tmp_path)],
+        capture_output=True,
+        text=True
+    )
+    if ret.returncode != 0:
+        if tmp_path.exists():
+            tmp_path.unlink()
+        error_message = ret.stderr.strip() or ret.stdout.strip() or 'unknown error'
+        raise RuntimeError(f'电子书转换失败: {error_message}')
+
+    os.rename(tmp_path, output_txt_path)
+    return output_txt_path
+
+
+def load_book_file(file_path: str):
+    source_path = Path(file_path)
+    suffix = source_path.suffix.lower()
+
+    if suffix not in SUPPORTED_INPUT_SUFFIXES:
+        supported = ', '.join(sorted(SUPPORTED_INPUT_SUFFIXES))
+        raise ValueError(f"不支持的输入格式: {suffix or '无后缀'}，仅支持 {supported}")
+
+    if suffix == '.txt':
+        return load_txt_file(file_path), source_path, False
+
+    converted_txt_path = get_converted_txt_path(file_path)
+    if converted_txt_path.is_file():
+        if converted_txt_path.stat().st_size > 0:
+            return load_txt_file(str(converted_txt_path)), converted_txt_path, False
+        converted_txt_path.unlink()
+
+    converted_txt_path = convert_book_to_txt(file_path, converted_txt_path)
+    return load_txt_file(str(converted_txt_path)), converted_txt_path, True
 
 
 def get_word_num(text):
@@ -554,15 +610,29 @@ def cli_main_process():
     if len(book_file_path) != 1 or '.' not in book_file_path[0]:
         _report_error(args, "invalid_args", "输入一个文件路径，且必须包含文件后缀")
         return 1
-    book_name = Path(book_file_path[0]).stem
-    if not os.path.isfile(book_file_path[0]):
+    input_path = Path(book_file_path[0])
+    book_name = input_path.stem
+    if not input_path.is_file():
         _report_error(args, "file_not_found", f"文件不存在: {book_file_path[0]}")
+        return 1
+    if input_path.suffix.lower() not in SUPPORTED_INPUT_SUFFIXES:
+        supported = ', '.join(sorted(SUPPORTED_INPUT_SUFFIXES))
+        _report_error(args, "unsupported_input_format", f"不支持的输入格式: {input_path.suffix or '无后缀'}，仅支持 {supported}")
         return 1
 
     if not args.json:
         console.print(f"\n[bold]{book_name}[/bold]")
 
-    raw_data = load_txt_file(book_file_path[0])
+    try:
+        raw_data, source_text_path, generated_txt = load_book_file(book_file_path[0])
+    except (ValueError, RuntimeError) as e:
+        _report_error(args, "input_conversion_failed", str(e))
+        return 1
+
+    if not args.json and input_path.suffix.lower() != '.txt':
+        status = '已生成' if generated_txt else '复用'
+        console.print(f"  [dim]{status} 文本: {source_text_path}[/dim]")
+
     toc, contents = construct_text_and_name(raw_data=raw_data, book_name=book_name)
 
     # 找到最后已生成的章节，提示用户断点位置
@@ -658,6 +728,7 @@ def cli_main_process():
             "total_clips": total_clips,
             "output_format": fmt,
             "output_directory": str(out_dir),
+            "source_text_file": str(source_text_path),
             "elapsed_seconds": round(elapsed, 1),
         }
         print(json.dumps(result, ensure_ascii=False))
@@ -679,13 +750,14 @@ def parse_arguments():
         description='Convert Chinese text novels to audiobooks using CosyVoice TTS.',
         epilog='Examples:\n'
                '  txt2audio novel.txt --range all\n'
+               '  txt2audio novel.epub --range all\n'
                '  txt2audio novel.txt --video --range 0~8 --json\n'
                '  txt2audio novel.txt --range all --speed 0.95 --set audio.mp3_bitrate=192k\n'
                '  txt2audio --dump-config --json\n',
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument('input_file_path', metavar='input_file_path', type=str, nargs='?',
-                        help='path to the text book (required unless --dump-config)')
+                        help='path to the book file (.txt/.epub/.mobi), required unless --dump-config')
     parser.add_argument('--video', action='store_true',
                         help='generate MP4 video with cover image (default: audio only)')
     parser.add_argument('--landscape', action='store_true',
