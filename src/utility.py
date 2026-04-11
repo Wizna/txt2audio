@@ -635,6 +635,11 @@ def cli_main_process():
 
     toc, contents = construct_text_and_name(raw_data=raw_data, book_name=book_name)
 
+    # 显示目录供用户选择章节
+    if not args.json and not args.quiet and toc:
+        for k, v in toc.items():
+            console.print(f"  [dim]{k:>5}[/dim]: {v}")
+
     # 找到最后已生成的章节，提示用户断点位置
     for idx in sorted(toc.keys(), reverse=True):
         output_path = str(OUTPUT_DIR / toc[idx])
