@@ -97,7 +97,7 @@ uv run txt2audio your_book.txt --range all --set tts.speed=0.9 --set audio.mp3_b
 uv run txt2audio your_book.txt --video --landscape --range all
 ```
 
-> 不带 `--range` 时，交互模式会提示选择范围；非交互模式（如管道/脚本）自动处理全部章节。
+> 不带 `--range` 时，交互模式会先打印完整目录（章节编号 + 路径），方便选择范围；非交互模式（如管道/脚本）自动处理全部章节。
 
 ### AI / Agent 集成
 
@@ -149,6 +149,7 @@ txt2audio/
 │   ├── video.py                           # 封面图生成、ffmpeg 转视频
 │   ├── subtitle.py                        # SRT 字幕生成
 │   └── config.py                          # 配置加载
+├── pyproject.toml                         # 项目元数据、依赖、CLI 入口
 ├── config.yaml                            # 运行时配置（TTS、音频、视频、路径）
 ├── resources/                             # 字体文件、参考音频
 ├── third_party/CosyVoice/                 # CosyVoice 子模块

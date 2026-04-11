@@ -77,7 +77,7 @@ def get_converted_txt_path(file_path: str) -> Path:
 
 
 def convert_book_to_txt(file_path: str, output_txt_path: Path) -> Path:
-    tmp_path = output_txt_path.with_suffix(output_txt_path.suffix + '.tmp')
+    tmp_path = output_txt_path.with_name(output_txt_path.stem + '.tmp' + output_txt_path.suffix)
     if tmp_path.exists():
         tmp_path.unlink()
     output_txt_path.parent.mkdir(parents=True, exist_ok=True)
