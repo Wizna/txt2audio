@@ -133,7 +133,7 @@ dmypy.json
 .idea
 
 output
-
+AGENTS.md
 CLAUDE.md
 .claude
 .specify
