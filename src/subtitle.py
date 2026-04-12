@@ -16,7 +16,7 @@ def save_subtitle_file(entries, output_path, clip_index):
     if not entries:
         return
     srt_path = f'{output_path}-{clip_index}.srt'
-    tmp_path = srt_path + '.tmp'
+    tmp_path = srt_path.replace('.srt', '.tmp.srt')
     with open(tmp_path, 'w', encoding='utf-8') as f:
         for i, (start, end, text) in enumerate(entries, 1):
             f.write(f'{i}\n')

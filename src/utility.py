@@ -133,19 +133,19 @@ def save_audio_file(wav_tensor, sample_rate, output_path: str, video_clip_index:
         return
     export_indices.append(video_clip_index)
     audio_file_path = f'{output_path}-{video_clip_index}.wav'
-    tmp_path = audio_file_path + '.tmp'
+    tmp_path = audio_file_path.replace('.wav', '.tmp.wav')
     if wav_tensor.dim() == 1:
         wav_tensor = wav_tensor.unsqueeze(0)
-    torchaudio.save(tmp_path, wav_tensor, sample_rate, format="wav")
+    torchaudio.save(tmp_path, wav_tensor, sample_rate)
     os.rename(tmp_path, audio_file_path)
 
 
 def convert_wav_to_mp3(wav_path, bitrate='128k'):
     """WAV → MP3，成功后删除原 WAV。使用临时文件确保原子写入。"""
     mp3_path = str(Path(wav_path).with_suffix('.mp3'))
-    tmp_path = mp3_path + '.tmp'
+    tmp_path = mp3_path.replace('.mp3', '.tmp.mp3')
     ret = _subprocess.run(
-        ['ffmpeg', '-y', '-i', wav_path, '-f', 'mp3', '-codec:a', 'libmp3lame', '-b:a', bitrate, tmp_path],
+        ['ffmpeg', '-y', '-i', wav_path, '-codec:a', 'libmp3lame', '-b:a', bitrate, tmp_path],
         capture_output=True
     )
     if ret.returncode == 0:
@@ -165,7 +165,7 @@ def check_export_file_exists(output_path, video_clip_index):
     自动清理中断留下的临时文件和空文件。"""
     base = f'{output_path}-{video_clip_index}'
     # 清理中断留下的临时文件
-    for ext in ('.wav.tmp', '.mp3.tmp', '.mp4.tmp'):
+    for ext in ('.tmp.wav', '.tmp.mp3', '.tmp.mp4'):
         tmp = base + ext
         if os.path.isfile(tmp):
             os.remove(tmp)

@@ -102,7 +102,7 @@ def transform_wav_to_video(number, audio, toc, resources_dir):
     当 config.video.subtitles 为 true 且存在对应 SRT 文件时，烧入字幕。"""
     image = create_image_from_text(number=number, toc=toc, audio=audio, resources_dir=resources_dir)
     video_path = str(Path(audio).with_suffix('.mp4'))
-    tmp_video_path = video_path + '.tmp'
+    tmp_video_path = video_path.replace('.mp4', '.tmp.mp4')
     vc = config['video']
 
     srt_path = str(Path(audio).with_suffix('.srt'))
@@ -124,7 +124,7 @@ def transform_wav_to_video(number, audio, toc, resources_dir):
         # ffmpeg subtitles 滤镜路径中需要转义特殊字符
         escaped_srt = srt_path.replace("'", r"'\''").replace(':', r'\:')
         command_line += f" -vf \"subtitles='{escaped_srt}':force_style='{subtitle_style}'\""
-    command_line += f' -shortest -movflags +faststart -f mp4 {shlex.quote(tmp_video_path)}'
+    command_line += f' -shortest -movflags +faststart {shlex.quote(tmp_video_path)}'
 
     logger.debug(f'ffmpeg command: {command_line}')
     ret = subprocess.run(command_line, capture_output=True, shell=True)
