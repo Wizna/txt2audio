@@ -99,7 +99,7 @@ def convert_book_to_txt(file_path: str, output_txt_path: Path) -> Path:
         error_message = ret.stderr.strip() or ret.stdout.strip() or 'unknown error'
         raise RuntimeError(f'电子书转换失败: {error_message}')
 
-    os.rename(tmp_path, output_txt_path)
+    shutil.move(tmp_path, output_txt_path)
     return output_txt_path
 
 
@@ -137,7 +137,7 @@ def save_audio_file(wav_tensor, sample_rate, output_path: str, video_clip_index:
     if wav_tensor.dim() == 1:
         wav_tensor = wav_tensor.unsqueeze(0)
     torchaudio.save(tmp_path, wav_tensor, sample_rate)
-    os.rename(tmp_path, audio_file_path)
+    shutil.move(tmp_path, audio_file_path)
 
 
 def convert_wav_to_mp3(wav_path, bitrate='128k'):
@@ -149,7 +149,7 @@ def convert_wav_to_mp3(wav_path, bitrate='128k'):
         capture_output=True
     )
     if ret.returncode == 0:
-        os.rename(tmp_path, mp3_path)
+        shutil.move(tmp_path, mp3_path)
         os.remove(wav_path)
         return mp3_path
     else:
@@ -405,6 +405,11 @@ def generate_chapter(chapter_name, last_special_delimiter):
         combined_name = '/'.join([i for i in chapter_name if i])
     else:
         combined_name = '/'.join([i for i in chapter_name[:-1] if i])
+
+    # 引言内容（出现在第一个卷/章/序之前的文本）只有书名没有子路径，
+    # 需要加上"引言"保证输出到书目录内部，而不是和书目录同级
+    if combined_name and '/' not in combined_name:
+        combined_name += '/引言'
 
     return combined_name
 

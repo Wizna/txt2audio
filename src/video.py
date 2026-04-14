@@ -1,5 +1,6 @@
 import subprocess
 import shlex
+import shutil
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 import hashlib
