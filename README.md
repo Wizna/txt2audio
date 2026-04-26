@@ -31,7 +31,7 @@
 |------|------|
 | Python 3.11+ | 见 `.python-version` |
 | [uv](https://github.com/astral-sh/uv) | Python 包管理器 |
-| `ffmpeg`（可选） | 输出 MP3 或生成视频时需要；仅输出 WAV 时不需要 |
+| `ffmpeg`（可选） | 输出 MP3 或生成视频时需要；仅输出 WAV 时不需要。如需字幕烧录（`subtitles: true`），请确保 ffmpeg 包含 **libass**（见下方说明） |
 | `ebook-convert`（Calibre，可选） | 输入为 `epub` / `mobi` 时需要；输入为 `.txt` 时不需要 |
 
 ## 快速开始
@@ -54,6 +54,10 @@ uv run python -c "from huggingface_hub import snapshot_download; snapshot_downlo
 - `ebook-convert`（Calibre）：仅当你要处理 `epub` / `mobi` 输入时安装
 
 不同系统的安装方式不同，请使用各自平台对应的包管理器或安装器。
+
+> **macOS M 系列芯片**：本项目的音频生成（CosyVoice3 0.5B CPU 推理）和视频转换均在 macOS Apple Silicon（M1/M2/M3/M4）上测试通过，16GB 内存即可流畅运行。如果你使用 Homebrew 安装 ffmpeg，默认不含 libass，字幕烧录会静默回退为无字幕模式。
+>
+> **ffmpeg 与 libass**：如需字幕烧录功能，请从 [ffmpeg.org/download.html](https://ffmpeg.org/download.html) 下载已编译的 macOS 静态构建版本（官方构建附带 libass），或通过 `brew install ffmpeg --with-libass` 重新编译安装。
 
 <details>
 <summary>已克隆但没有拉取子模块？</summary>
@@ -216,7 +220,7 @@ video:
   orientation: portrait                    # portrait (竖屏) | landscape (横屏)
   width: 720                               # 封面图尺寸
   height: 1280
-  subtitles: false                         # 是否烧入字幕
+  subtitles: false                         # 是否烧入字幕（需 ffmpeg 包含 libass，见上文「ffmpeg 与 libass」说明）
   subtitle_style: "FontSize=22,..."        # ASS 字幕样式
   ffmpeg_audio_bitrate: 96k                # 语音 96k 足够
   ffmpeg_video_crf: 28                     # 静态封面可用高 CRF
@@ -240,7 +244,7 @@ paths:
 > [!CAUTION]
 > **PyTorch 版本必须 < 2.4**（已锁定 2.3.x）。PyTorch 2.4+ 改变了 Qwen2 注意力计算的默认行为，会导致语音合成输出乱码。`torch`、`torchaudio`、`transformers`、`onnxruntime` 均已锁定兼容版本，升级前请务必测试音频质量。
 
-- Apple Silicon (M1/M2) 上 0.5B 模型 CPU 推理约需 16GB 内存
+- 本项目在 **macOS Apple Silicon（M1~M4）** 上开发测试，0.5B 模型 CPU 推理约需 16GB 内存
 - macOS ARM 上 WeTextProcessing 可能存在编译问题，项目使用 `wetext` 替代
 - 输出 MP3 或生成视频时依赖 `ffmpeg`；若只输出 WAV，则不需要安装
 - `epub` / `mobi` 输入依赖 Calibre 的 `ebook-convert`；若未安装，程序会直接报错提示

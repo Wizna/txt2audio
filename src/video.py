@@ -7,6 +7,7 @@ import hashlib
 import re
 import os
 import logging
+import functools
 from config import config
 
 logger = logging.getLogger('txt2audio')
@@ -98,6 +99,16 @@ def create_image_from_text(number, toc, audio, resources_dir, max_w=None, max_h=
     return result
 
 
+@functools.lru_cache(maxsize=1)
+def _ffmpeg_has_subtitles_filter():
+    """缓存 ffmpeg 的 subtitles 滤镜检测结果，每个进程只运行一次。"""
+    try:
+        ret = subprocess.run(['ffmpeg', '-filters'], capture_output=True, text=True, timeout=10)
+        return 'subtitles' in ret.stdout
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
 def transform_wav_to_video(number, audio, toc, resources_dir):
     """wav + 封面图 -> mp4，成功后删除原 wav。使用临时文件确保原子写入。
     当 config.video.subtitles 为 true 且存在对应 SRT 文件时，烧入字幕。"""
@@ -108,6 +119,10 @@ def transform_wav_to_video(number, audio, toc, resources_dir):
 
     srt_path = str(Path(audio).with_suffix('.srt'))
     use_subtitles = vc.get('subtitles', False) and os.path.isfile(srt_path)
+    if use_subtitles and not _ffmpeg_has_subtitles_filter():
+        logger.warning('ffmpeg lacks libass (subtitles filter), disabling subtitle burn-in. '
+                       'Install ffmpeg with libass from https://ffmpeg.org/download.html')
+        use_subtitles = False
 
     # 字幕需要更高帧率以精确显示/消失
     framerate = max(vc.get('ffmpeg_video_framerate', 1), 10) if use_subtitles else vc.get('ffmpeg_video_framerate', 1)
