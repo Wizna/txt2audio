@@ -139,7 +139,7 @@ def transform_wav_to_video(number, audio, toc, resources_dir):
         subtitle_style = vc.get('subtitle_style', 'FontSize=22,PrimaryColour=&Hffffff,Alignment=2,MarginV=40')
         # ffmpeg subtitles 滤镜路径中需要转义特殊字符
         escaped_srt = srt_path.replace("'", r"'\''").replace(':', r'\:')
-        command_line += f" -vf \"subtitles='{escaped_srt}':force_style='{subtitle_style}'\""
+        command_line += f" -vf \"subtitles='{escaped_srt}':force_style='{subtitle_style}':wrap_unicode=1\""
     command_line += f' -shortest -movflags +faststart {shlex.quote(tmp_video_path)}'
 
     logger.debug(f'ffmpeg command: {command_line}')

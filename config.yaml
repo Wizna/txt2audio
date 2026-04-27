@@ -52,6 +52,8 @@ video:
   # 字幕设置（仅 --video 模式生效）
   subtitles: true                     # 是否烧入字幕（默认开启）
   subtitle_style: "FontSize=22,PrimaryColour=&Hffffff,Alignment=2,MarginV=40"
+  subtitle_max_chars_per_line: 10  # 每行最大字符数（FontSize=22 在 720px 宽约显示 10 个汉字）
+  subtitle_max_lines: 2            # 字幕最大行数（超出则拆分为多条字幕，按时间比例分配）
 
 # 路径（相对于项目根目录）
 paths:

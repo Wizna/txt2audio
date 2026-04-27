@@ -195,15 +195,18 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=None):
     wav_chunks = []
     subtitle_entries = []
     current_time = 0.0
-    sentences = annotate_polyphones(text)
-    sentences = mask_punctuations(text=sentences)
+    subtitle_text = mask_punctuations(text=text)
+    sentences = mask_punctuations(text=annotate_polyphones(text))
     export = check_export_file_exists(output_path=output_path, video_clip_index=video_clip_index)
 
     silence = None
     if INTER_SENTENCE_SILENCE_MS > 0:
         silence = torch.zeros(1, int(sample_rate * INTER_SENTENCE_SILENCE_MS / 1000))
 
-    for processed_sentences in split_long_sentences(sentences):
+    tts_segments = split_long_sentences(sentences)
+    sub_segments = split_long_sentences(subtitle_text)
+
+    for i, processed_sentences in enumerate(tts_segments):
         if export:
             sentence_start = current_time
             if silence is not None and wav_chunks:
@@ -216,7 +219,8 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=None):
             ):
                 wav_chunks.append(chunk['tts_speech'])
                 current_time += chunk['tts_speech'].shape[-1] / sample_rate
-            subtitle_entries.append((sentence_start, current_time, processed_sentences))
+            sub_text = sub_segments[i] if i < len(sub_segments) else processed_sentences
+            subtitle_entries.append((sentence_start, current_time, sub_text))
         word_count += get_word_num(text=processed_sentences)
 
         if MAX_CHARS_PER_CLIP > 0 and word_count > MAX_CHARS_PER_CLIP:
