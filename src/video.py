@@ -136,7 +136,7 @@ def transform_wav_to_video(number, audio, toc, resources_dir):
         f' -pix_fmt {vc["ffmpeg_pixel_format"]}'
     )
     if use_subtitles:
-        subtitle_style = vc.get('subtitle_style', 'FontSize=22,PrimaryColour=&Hffffff,Alignment=2,MarginV=40')
+        subtitle_style = vc.get('subtitle_style', 'FontSize=16,PrimaryColour=&Hffffff,Alignment=2,MarginV=40')
         # ffmpeg subtitles 滤镜路径中需要转义特殊字符
         escaped_srt = srt_path.replace("'", r"'\''").replace(':', r'\:')
         command_line += f" -vf \"subtitles='{escaped_srt}':force_style='{subtitle_style}':wrap_unicode=1\""

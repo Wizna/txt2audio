@@ -47,6 +47,15 @@ def split_subtitle_entries(entries):
     return result
 
 
+def _wrap_text(text, max_chars_per_line):
+    if len(text) <= max_chars_per_line:
+        return text
+    lines = []
+    for i in range(0, len(text), max_chars_per_line):
+        lines.append(text[i:i + max_chars_per_line])
+    return '\n'.join(lines)
+
+
 def format_srt_time(seconds):
     """秒数 → SRT 时间格式 HH:MM:SS,mmm"""
     hours = int(seconds // 3600)
@@ -62,11 +71,15 @@ def save_subtitle_file(entries, output_path, clip_index):
     if not entries:
         return
     entries = split_subtitle_entries(entries)
+    max_chars_per_line = config['video'].get('subtitle_max_chars_per_line', 18)
+    max_lines = config['video'].get('subtitle_max_lines', 2)
+    orientation = config['video'].get('orientation', 'portrait')
+    wrap_width = max_chars_per_line if orientation == 'portrait' else max_chars_per_line * max_lines
     srt_path = f'{output_path}-{clip_index}.srt'
     tmp_path = srt_path.replace('.srt', '.tmp.srt')
     with open(tmp_path, 'w', encoding='utf-8') as f:
         for i, (start, end, text) in enumerate(entries, 1):
             f.write(f'{i}\n')
             f.write(f'{format_srt_time(start)} --> {format_srt_time(end)}\n')
-            f.write(f'{text}\n\n')
+            f.write(f'{_wrap_text(text, wrap_width)}\n\n')
     os.rename(tmp_path, srt_path)
