@@ -206,7 +206,7 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=None):
 
     for raw_sentence in raw_sentences:
         tts_sentence = mask_punctuations(text=annotate_polyphones(raw_sentence))
-        sub_sentence = mask_punctuations(text=raw_sentence)
+        sub_sentence = mask_punctuations(text=raw_sentence).rstrip('。')
         if not tts_sentence or not sub_sentence:
             continue
 
