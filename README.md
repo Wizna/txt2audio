@@ -221,7 +221,7 @@ video:
   width: 720                               # 封面图尺寸
   height: 1280
   subtitles: false                         # 是否烧入字幕（需 ffmpeg 包含 libass，见上文「ffmpeg 与 libass」说明）
-  subtitle_style: "FontSize=22,..."        # ASS 字幕样式
+  subtitle_style: "FontSize=22,..."        # ASS 字幕样式（MarginV 在 PlayResY=288 坐标空间，实际像素 = 设定值 × 视频高度/288）
   ffmpeg_audio_bitrate: 96k                # 语音 96k 足够
   ffmpeg_video_crf: 28                     # 静态封面可用高 CRF
   ffmpeg_video_framerate: 1                # 静态封面 1fps（字幕模式自动提升到 10fps）
@@ -248,3 +248,4 @@ paths:
 - macOS ARM 上 WeTextProcessing 可能存在编译问题，项目使用 `wetext` 替代
 - 输出 MP3 或生成视频时依赖 `ffmpeg`；若只输出 WAV，则不需要安装
 - `epub` / `mobi` 输入依赖 Calibre 的 `ebook-convert`；若未安装，程序会直接报错提示
+- 字幕位置通过 `subtitle_style` 中的 `MarginV` 和 `Alignment` 控制。由于 ffmpeg 内部将 SRT 转为 ASS 时使用 `PlayResY=288` 坐标系，`MarginV` 的实际像素 = 设定值 × 视频高度 / 288。竖屏 (1280px) 约 4.4 倍，横屏 (720px) 约 2.5 倍。调整字幕位置时请注意与封面上的章节号（位于画面 77% 高度处）保持间距。
