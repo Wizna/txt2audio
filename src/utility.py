@@ -249,7 +249,7 @@ def mask_punctuations(text):
     text = re.sub(r"([！@=…？])\1+", r"\1", text)  # replace !! -> !
     text = re.sub(r'[…]+', '。', text)
     text = text.replace('·', '').replace('※', '')
-    text = re.sub(r'[=]+', '。', text)
+    text = re.sub(r'[=]+', '', text)
     text = text.replace('《', '').replace('》', '').replace("\n", " ").strip()
 
     # 移除 URL
@@ -451,6 +451,10 @@ def construct_text_and_name(raw_data, book_name: str):
         line = line.strip()
 
         if not line:
+            continue
+
+        # 过滤纯装饰分隔线（===、---、***、~~~ 等），避免被 mask_punctuations 转为多余标点
+        if re.match(r'^[=\-*~#]{3,}$', line):
             continue
 
         new_chapter = False
