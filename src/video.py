@@ -92,7 +92,7 @@ def create_image_from_text(number, toc, audio, resources_dir, max_w=None, max_h=
     (left, top, right, bottom) = d.textbbox(xy=(0, 0), text=f'{number}', font=number_font)
     w = right - left
     h = bottom - top
-    draw_underlined_text(d, ((max_w - w) / 2, int(max_h * 0.88)), f'{number}', font=number_font)
+    draw_underlined_text(d, ((max_w - w) / 2, int(max_h * 0.77)), f'{number}', font=number_font)
 
     result = f'{os.path.dirname(audio)}/cover.jpg'
     img.save(result, quality=config['video'].get('cover_jpeg_quality', 70))
@@ -136,7 +136,7 @@ def transform_wav_to_video(number, audio, toc, resources_dir):
         f' -pix_fmt {vc["ffmpeg_pixel_format"]}'
     )
     if use_subtitles:
-        subtitle_style = vc.get('subtitle_style', 'FontSize=16,PrimaryColour=&Hffffff,Alignment=2,MarginV=200')
+        subtitle_style = vc.get('subtitle_style', 'FontSize=16,PrimaryColour=&Hffffff,Alignment=2,MarginV=95')
         # ffmpeg subtitles 滤镜路径中需要转义特殊字符
         escaped_srt = srt_path.replace("'", r"'\''").replace(':', r'\:')
         command_line += f" -vf \"subtitles='{escaped_srt}':force_style='{subtitle_style}':wrap_unicode=1\""
