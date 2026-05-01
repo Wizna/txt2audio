@@ -17,23 +17,15 @@ def split_subtitle_entries(entries):
             continue
         parts = re.split(r'([，、；：])', text)
         segments = []
-        buf = []
         for part in parts:
-            buf.append(part)
             if part in '，、；：':
+                if segments:
+                    segments[-1] += part
                 continue
-            joined = ''.join(buf)
-            if segments and len(segments[-1]) + len(joined) <= max_chars:
-                segments[-1] += joined
+            if segments and len(segments[-1]) + len(part) <= max_chars:
+                segments[-1] += part
             else:
-                segments.append(joined)
-            buf = []
-        if buf:
-            tail = ''.join(buf)
-            if segments and len(segments[-1]) + len(tail) <= max_chars:
-                segments[-1] += tail
-            else:
-                segments.append(tail)
+                segments.append(part)
         if not segments:
             result.append((start, end, text))
             continue
