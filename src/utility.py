@@ -195,18 +195,21 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=None):
     wav_chunks = []
     subtitle_entries = []
     current_time = 0.0
-    subtitle_text = mask_punctuations(text=text)
-    sentences = mask_punctuations(text=annotate_polyphones(text))
     export = check_export_file_exists(output_path=output_path, video_clip_index=video_clip_index)
 
     silence = None
     if INTER_SENTENCE_SILENCE_MS > 0:
         silence = torch.zeros(1, int(sample_rate * INTER_SENTENCE_SILENCE_MS / 1000))
 
-    tts_segments = split_long_sentences(sentences)
-    sub_segments = split_long_sentences(subtitle_text)
+    # 在句尾标点处拆分为独立句子，确保每个句子有精确的时间戳
+    raw_sentences = [s.strip() for s in re.split(r'(?<=[。！？])', text) if s.strip()]
 
-    for i, processed_sentences in enumerate(tts_segments):
+    for raw_sentence in raw_sentences:
+        tts_sentence = mask_punctuations(text=annotate_polyphones(raw_sentence))
+        sub_sentence = mask_punctuations(text=raw_sentence)
+        if not tts_sentence or not sub_sentence:
+            continue
+
         if export:
             sentence_start = current_time
             if silence is not None and wav_chunks:
@@ -214,14 +217,13 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=None):
                 current_time += INTER_SENTENCE_SILENCE_MS / 1000
                 sentence_start = current_time
             for chunk in cosyvoice.inference_zero_shot(
-                processed_sentences, PROMPT_TEXT, SPEAKER_WAV,
+                tts_sentence, PROMPT_TEXT, SPEAKER_WAV,
                 zero_shot_spk_id='narrator', stream=False, speed=SPEED
             ):
                 wav_chunks.append(chunk['tts_speech'])
                 current_time += chunk['tts_speech'].shape[-1] / sample_rate
-            sub_text = sub_segments[i] if i < len(sub_segments) else processed_sentences
-            subtitle_entries.append((sentence_start, current_time, sub_text))
-        word_count += get_word_num(text=processed_sentences)
+            subtitle_entries.append((sentence_start, current_time, sub_sentence))
+        word_count += get_word_num(text=raw_sentence)
 
         if MAX_CHARS_PER_CLIP > 0 and word_count > MAX_CHARS_PER_CLIP:
             combined = torch.cat(wav_chunks, dim=-1) if wav_chunks else None
