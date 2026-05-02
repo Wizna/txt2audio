@@ -1,6 +1,5 @@
 import subprocess
 import shlex
-import shutil
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 import hashlib
@@ -75,7 +74,7 @@ def create_image_from_text(number, toc, audio, resources_dir, max_w=None, max_h=
     current_h = int(max_h * 0.16)
     pad = int(max_h * 0.03)
     for idx, sub_para in enumerate(toc.split('/')):
-        sub_para = re.sub(r'（.+）', ' ', sub_para)
+        sub_para = re.sub(r'（.+?）', ' ', sub_para)
         for line in sub_para.split(' '):
             line = line.strip()
 

@@ -19,16 +19,13 @@ def split_subtitle_entries(entries):
         segments = []
         for part in parts:
             if part in '，、；：':
-                if segments:
+                if segments and len(segments[-1]) + len(part) <= max_chars:
                     segments[-1] += part
                 continue
             if segments and len(segments[-1]) + len(part) <= max_chars:
                 segments[-1] += part
             else:
                 segments.append(part)
-        if not segments:
-            result.append((start, end, text))
-            continue
         total_chars = sum(len(s) for s in segments)
         duration = end - start
         t = start
