@@ -20,7 +20,7 @@ tts:
 audio:
   # 每个音频片段的汉字上限（-1 表示不分片，整章一个文件）
   max_chars_per_clip: 6300
-  # TTS 模型单次输入的字符上限（实际分句由 CosyVoice 内部 split_paragraph 处理）
+  # TTS 模型单次输入的字符上限（仅供参考，代码不读取此值；实际分句由 CosyVoice 内部 split_paragraph 处理）
   model_sentence_limit: 2000
   # 纯音频模式的输出格式：mp3（推荐，体积小兼容好）或 wav（无压缩）
   output_format: mp3

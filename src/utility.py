@@ -529,7 +529,7 @@ def _apply_config_overrides(args):
 
     for override in args.set:
         key, _, value = override.partition('=')
-        if not value and not _:
+        if not _:
             logger.warning(f"Ignoring malformed --set: {override} (expected KEY=VALUE)")
             continue
         parts = key.split('.')

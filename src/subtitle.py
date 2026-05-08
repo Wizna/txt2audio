@@ -4,6 +4,13 @@ import re
 from config import config
 
 
+_STRIP_EDGE_PUNCT = '，。、；：—'  # 装饰/节奏性标点，字幕帧首尾去掉；？！…… 保留
+
+
+def _strip_edge_punct(text: str) -> str:
+    return text.strip(_STRIP_EDGE_PUNCT)
+
+
 def split_subtitle_entries(entries):
     """将过长的字幕条目在分句标点处拆分，按字符数比例分配时间。"""
     max_chars_per_line = config['video'].get('subtitle_max_chars_per_line', 18)
@@ -13,7 +20,9 @@ def split_subtitle_entries(entries):
     result = []
     for start, end, text in entries:
         if len(text) <= max_chars:
-            result.append((start, end, text))
+            cleaned = _strip_edge_punct(text)
+            if cleaned:
+                result.append((start, end, cleaned))
             continue
         parts = re.split(r'([，、；：])', text)
         segments = []
@@ -21,6 +30,10 @@ def split_subtitle_entries(entries):
             if part in '，、；：':
                 if segments and len(segments[-1]) + len(part) <= max_chars:
                     segments[-1] += part
+                elif segments:
+                    # 标点放不进上一段（已满）→ 暂存为新段，与下段文字合并
+                    segments.append(part)
+                # segments 为空（文本开头的标点）→ 丢弃
                 continue
             if segments and len(segments[-1]) + len(part) <= max_chars:
                 segments[-1] += part
@@ -31,7 +44,9 @@ def split_subtitle_entries(entries):
         t = start
         for seg in segments:
             seg_dur = duration * len(seg) / total_chars if total_chars > 0 else 0
-            result.append((t, t + seg_dur, seg))
+            cleaned = _strip_edge_punct(seg)
+            if cleaned:
+                result.append((t, t + seg_dur, cleaned))
             t += seg_dur
     return result
 
