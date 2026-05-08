@@ -503,7 +503,8 @@ def _check_ffmpeg():
         _subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
     except (FileNotFoundError, _subprocess.CalledProcessError):
         logger.error("ffmpeg not found. Please install ffmpeg.")
-        logger.error("  macOS: brew install ffmpeg")
+        logger.error("  macOS:   brew install ffmpeg")
+        logger.error("  Windows: winget install ffmpeg  (or download from https://ffmpeg.org/download.html)")
         raise SystemExit(1)
 
 

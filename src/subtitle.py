@@ -86,4 +86,4 @@ def save_subtitle_file(entries, output_path, clip_index):
             f.write(f'{i}\n')
             f.write(f'{format_srt_time(start)} --> {format_srt_time(end)}\n')
             f.write(f'{_wrap_text(text, wrap_width)}\n\n')
-    os.rename(tmp_path, srt_path)
+    os.replace(tmp_path, srt_path)

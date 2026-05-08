@@ -1,5 +1,4 @@
 import subprocess
-import shlex
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 import hashlib
@@ -126,26 +125,26 @@ def transform_wav_to_video(number, audio, toc, resources_dir):
     # 字幕需要更高帧率以精确显示/消失
     framerate = max(vc.get('ffmpeg_video_framerate', 1), 10) if use_subtitles else vc.get('ffmpeg_video_framerate', 1)
 
-    command_line = (
-        f'ffmpeg -y -loop 1 -i {shlex.quote(image)} -i {shlex.quote(audio)}'
-        f' -r {framerate}'
-        f' -c:v {vc["ffmpeg_video_codec"]} -tune {vc["ffmpeg_tune"]}'
-        f' -crf {vc.get("ffmpeg_video_crf", 28)} -preset {vc.get("ffmpeg_video_preset", "medium")}'
-        f' -c:a {vc["ffmpeg_audio_codec"]} -b:a {vc["ffmpeg_audio_bitrate"]}'
-        f' -pix_fmt {vc["ffmpeg_pixel_format"]}'
-    )
+    command = [
+        'ffmpeg', '-y', '-loop', '1', '-i', image, '-i', audio,
+        '-r', str(framerate),
+        '-c:v', vc['ffmpeg_video_codec'], '-tune', vc['ffmpeg_tune'],
+        '-crf', str(vc.get('ffmpeg_video_crf', 28)), '-preset', vc.get('ffmpeg_video_preset', 'medium'),
+        '-c:a', vc['ffmpeg_audio_codec'], '-b:a', vc['ffmpeg_audio_bitrate'],
+        '-pix_fmt', vc['ffmpeg_pixel_format'],
+    ]
     if use_subtitles:
         subtitle_style = vc.get('subtitle_style', 'FontSize=16,PrimaryColour=&Hffffff,Alignment=2,MarginV=95')
-        # ffmpeg subtitles 滤镜路径中需要转义特殊字符
-        escaped_srt = srt_path.replace("'", r"'\''").replace(':', r'\:')
-        command_line += f" -vf \"subtitles='{escaped_srt}':force_style='{subtitle_style}':wrap_unicode=1\""
-    command_line += f' -shortest -movflags +faststart {shlex.quote(tmp_video_path)}'
+        # ffmpeg filter 语法转义（非 shell 转义）：反斜杠 → \\，冒号 → \:，单引号 → \'
+        escaped_srt = srt_path.replace('\\', '\\\\').replace(':', r'\:').replace("'", r"\'")
+        command += ['-vf', f"subtitles='{escaped_srt}':force_style='{subtitle_style}':wrap_unicode=1"]
+    command += ['-shortest', '-movflags', '+faststart', tmp_video_path]
 
-    logger.debug(f'ffmpeg command: {command_line}')
-    ret = subprocess.run(command_line, capture_output=True, shell=True)
+    logger.debug(f'ffmpeg command: {command}')
+    ret = subprocess.run(command, capture_output=True)
     logger.debug(ret.stdout.decode())
     if ret.returncode == 0:
-        os.rename(tmp_video_path, video_path)
+        os.replace(tmp_video_path, video_path)
         os.remove(audio)
         # 清理字幕文件
         if os.path.isfile(srt_path):
