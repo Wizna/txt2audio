@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-05-26",
+  "updated_at": "2026-05-27",
   "goal": "Support macOS and Windows with verified path handling, config overrides, and media export workflows.",
   "target_matrix": {
     "macos": {
@@ -16,10 +16,10 @@
     {
       "id": "metadata-support-boundary",
       "title": "Constrain declared support boundary",
-      "status": "in_progress",
+      "status": "completed",
       "notes": [
         "Updated requires-python to >=3.11,<3.13 in pyproject.toml.",
-        "README support boundary update is still pending."
+        "README now separates verified macOS support from planned Windows support."
       ]
     },
     {
@@ -53,9 +53,12 @@
     {
       "id": "ffmpeg-subtitle-filter",
       "title": "Harden ffmpeg subtitle filter path escaping",
-      "status": "pending",
+      "status": "completed",
       "notes": [
-        "Current escaping is insufficient for Windows drive-letter and filtergraph edge cases."
+        "Added a dedicated subtitles filter builder in src/video.py.",
+        "Normalize subtitle paths to forward-slash form before escaping.",
+        "Escape filename/style values for both ffmpeg option parsing and filtergraph parsing.",
+        "Added unit coverage for Windows drive letters, spaces, quotes, brackets, commas, and semicolons."
       ]
     },
     {
@@ -73,6 +76,7 @@
       "status": "in_progress",
       "notes": [
         "Added unittest coverage for path sanitization and runtime path resolution.",
+        "Added unittest coverage for ffmpeg subtitles filter escaping.",
         "Verified compileall and `uv run txt2audio --dump-config --json` in the current workspace.",
         "Real macOS/Windows media generation smoke runs are still pending."
       ]
@@ -82,11 +86,10 @@
     "Created implementation plan document at docs/platform-support-plan.md.",
     "Added src/pathing.py and switched main output/media path derivation to it.",
     "Normalized config paths after runtime overrides and refreshed module globals.",
-    "Constrained requires-python to >=3.11,<3.13 and added unittest coverage for path helpers."
+    "Constrained requires-python to >=3.11,<3.13 and added unittest coverage for path helpers.",
+    "Added a dedicated ffmpeg subtitles filter builder and updated README support boundaries."
   ],
   "known_open_risks": [
-    "Windows subtitle burn-in is still blocked on ffmpeg filter escaping hardening.",
-    "README has not yet been updated to reflect the tightened platform support boundary.",
     "Real platform verification has not run yet in this workspace."
   ]
 }

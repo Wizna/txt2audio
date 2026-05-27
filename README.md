@@ -29,7 +29,7 @@
 
 | 依赖 | 说明 |
 |------|------|
-| Python 3.11+ | 见 `.python-version` |
+| Python 3.11 / 3.12 | 当前正式支持范围；见 `.python-version` |
 | [uv](https://github.com/astral-sh/uv) | Python 包管理器 |
 | `ffmpeg`（可选） | 输出 MP3 或生成视频时需要；仅输出 WAV 时不需要。如需字幕烧录（`subtitles: true`），请确保 ffmpeg 包含 **libass**（见下方说明） |
 | `ebook-convert`（Calibre，可选） | 输入为 `epub` / `mobi` 时需要；输入为 `.txt` 时不需要 |
@@ -55,7 +55,11 @@ uv run python -c "from huggingface_hub import snapshot_download; snapshot_downlo
 
 不同系统的安装方式不同，请使用各自平台对应的包管理器或安装器。
 
-> **macOS M 系列芯片**：本项目的音频生成（CosyVoice3 0.5B CPU 推理）和视频转换均在 macOS Apple Silicon（M1/M2/M3/M4）上测试通过，16GB 内存即可流畅运行。如果你使用 Homebrew 安装 ffmpeg，默认不含 libass，字幕烧录会静默回退为无字幕模式。
+> **已验证平台**：本项目的音频生成（CosyVoice3 0.5B CPU 推理）和视频转换目前已在 macOS Apple Silicon（M1/M2/M3/M4）上测试通过，16GB 内存即可流畅运行。
+>
+> **计划支持平台**：Windows x64 的路径兼容与 CLI 基础能力已经开始适配，但完整媒体生成链路仍需进一步冒烟验证后再作为正式支持声明。
+>
+> **Homebrew ffmpeg 注意事项**：如果你使用 Homebrew 安装 ffmpeg，默认不含 libass，字幕烧录会静默回退为无字幕模式。
 >
 > **ffmpeg 与 libass**：如需字幕烧录功能，请从 [ffmpeg.org/download.html](https://ffmpeg.org/download.html) 下载已编译的 macOS 静态构建版本（官方构建附带 libass），或通过 `brew install ffmpeg --with-libass` 重新编译安装。
 
@@ -244,7 +248,9 @@ paths:
 > [!CAUTION]
 > **PyTorch 版本必须 < 2.4**（已锁定 2.3.x）。PyTorch 2.4+ 改变了 Qwen2 注意力计算的默认行为，会导致语音合成输出乱码。`torch`、`torchaudio`、`transformers`、`onnxruntime` 均已锁定兼容版本，升级前请务必测试音频质量。
 
+- 本项目当前正式支持 Python **3.11 / 3.12**；暂不声明 Python 3.13+ 支持
 - 本项目在 **macOS Apple Silicon（M1~M4）** 上开发测试，0.5B 模型 CPU 推理约需 16GB 内存
+- Windows x64 兼容改造进行中；路径与配置覆盖链路已适配，但完整 MP3 / MP4 / 字幕烧录仍需真机验证
 - macOS ARM 上 WeTextProcessing 可能存在编译问题，项目使用 `wetext` 替代
 - 输出 MP3 或生成视频时依赖 `ffmpeg`；若只输出 WAV，则不需要安装
 - `epub` / `mobi` 输入依赖 Calibre 的 `ebook-convert`；若未安装，程序会直接报错提示

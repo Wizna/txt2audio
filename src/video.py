@@ -7,6 +7,7 @@ import os
 import logging
 import functools
 from config import config
+from ffmpeg_filters import build_subtitles_filter
 from pathing import tmp_output_path
 
 logger = logging.getLogger('txt2audio')
@@ -137,9 +138,7 @@ def transform_wav_to_video(number, audio, toc, resources_dir):
     ]
     if use_subtitles:
         subtitle_style = vc.get('subtitle_style', 'FontSize=16,PrimaryColour=&Hffffff,Alignment=2,MarginV=95')
-        # ffmpeg filter 语法转义（非 shell 转义）：反斜杠 → \\，冒号 → \:，单引号 → \'
-        escaped_srt = str(srt_path).replace('\\', '\\\\').replace(':', r'\:').replace("'", r"\'")
-        command += ['-vf', f"subtitles='{escaped_srt}':force_style='{subtitle_style}':wrap_unicode=1"]
+        command += ['-vf', build_subtitles_filter(srt_path, subtitle_style)]
     command += ['-shortest', '-movflags', '+faststart', str(tmp_video_path)]
 
     logger.debug(f'ffmpeg command: {command}')
