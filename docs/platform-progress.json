@@ -78,6 +78,7 @@
         "Added unittest coverage for path sanitization and runtime path resolution.",
         "Added unittest coverage for ffmpeg subtitles filter escaping.",
         "Verified compileall and `uv run txt2audio --dump-config --json` in the current workspace.",
+        "Added a CLI-level `--validate-paths` mode for path/config verification without loading the TTS model.",
         "Real macOS/Windows media generation smoke runs are still pending."
       ]
     }
@@ -87,7 +88,8 @@
     "Added src/pathing.py and switched main output/media path derivation to it.",
     "Normalized config paths after runtime overrides and refreshed module globals.",
     "Constrained requires-python to >=3.11,<3.13 and added unittest coverage for path helpers.",
-    "Added a dedicated ffmpeg subtitles filter builder and updated README support boundaries."
+    "Added a dedicated ffmpeg subtitles filter builder and updated README support boundaries.",
+    "Added a lightweight --validate-paths CLI mode for cross-platform path verification."
   ],
   "known_open_risks": [
     "Real platform verification has not run yet in this workspace."

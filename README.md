@@ -116,6 +116,9 @@ uv run txt2audio your_book.txt --range all --json
 # 查看当前生效配置
 uv run txt2audio --dump-config --json
 
+# 仅验证章节解析和输出路径，不加载模型也不生成媒体
+uv run txt2audio your_book.txt --validate-paths --json
+
 # 静默模式（仅输出错误）
 uv run txt2audio your_book.txt --range all --quiet
 ```

@@ -15,17 +15,12 @@ from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRe
 from rich.panel import Panel
 
 from charset_normalizer import from_path
-from pypinyin import pinyin, Style, load_phrases_dict
-from pypinyin.contrib.tone_convert import to_initials, to_finals_tone
 import re
 from pathlib import Path
 import math
-import torch
-import torchaudio
-from video import transform_wav_to_video
-from subtitle import save_subtitle_file
 from config import config, PROJECT_ROOT, normalize_config_paths
 from pathing import build_clip_output_path, build_display_path, build_output_relpath, tmp_output_path
+from validation import build_path_validation_entries
 
 logger = logging.getLogger('txt2audio')
 console = Console(stderr=True)
@@ -45,6 +40,13 @@ MAX_CHARS_PER_CLIP = config['audio']['max_chars_per_clip']
 SPEED = config['tts'].get('speed', 1.0)
 INTER_SENTENCE_SILENCE_MS = config['tts'].get('inter_sentence_silence_ms', 0)
 _tts = None
+_torch = None
+_torchaudio = None
+_polyphone_support_loaded = False
+_pinyin = None
+_style_tone = None
+_to_initials = None
+_to_finals_tone = None
 
 
 def _decode_subprocess_output(data):
@@ -53,6 +55,37 @@ def _decode_subprocess_output(data):
 
 def _book_output_dir(book_name: str) -> Path:
     return OUTPUT_DIR / build_output_relpath([book_name], set())
+
+
+def _load_torch_modules():
+    global _torch, _torchaudio
+    if _torch is None or _torchaudio is None:
+        import torch as torch_module
+        import torchaudio as torchaudio_module
+        _torch = torch_module
+        _torchaudio = torchaudio_module
+    return _torch, _torchaudio
+
+
+def _ensure_polyphone_support_loaded():
+    global _polyphone_support_loaded, _pinyin, _style_tone, _to_initials, _to_finals_tone
+    if _polyphone_support_loaded:
+        return
+
+    from pypinyin import pinyin as pinyin_func, Style, load_phrases_dict
+    from pypinyin.contrib.tone_convert import to_initials as to_initials_func, to_finals_tone as to_finals_tone_func
+
+    load_phrases_dict({
+        '精校': [['jīng'], ['jiào']],
+        '校对': [['jiào'], ['duì']],
+        '校勘': [['jiào'], ['kān']],
+    })
+
+    _pinyin = pinyin_func
+    _style_tone = Style.TONE
+    _to_initials = to_initials_func
+    _to_finals_tone = to_finals_tone_func
+    _polyphone_support_loaded = True
 
 
 def get_tts():
@@ -143,13 +176,14 @@ def get_word_num(text):
 def save_audio_file(wav_tensor, sample_rate, output_path: str, video_clip_index: int, export_indices: List) -> None:
     if wav_tensor is None or wav_tensor.numel() == 0:
         return
+    _, torchaudio_module = _load_torch_modules()
     export_indices.append(video_clip_index)
     output_stem = Path(output_path)
     audio_file_path = build_clip_output_path(output_stem, video_clip_index, '.wav')
     tmp_path = tmp_output_path(audio_file_path)
     if wav_tensor.dim() == 1:
         wav_tensor = wav_tensor.unsqueeze(0)
-    torchaudio.save(str(tmp_path), wav_tensor, sample_rate)
+    torchaudio_module.save(str(tmp_path), wav_tensor, sample_rate)
     shutil.move(tmp_path, audio_file_path)
 
 
@@ -200,6 +234,9 @@ def check_export_file_exists(output_path, video_clip_index):
 def generate_audio_clip(text: str, output_path: str, sample_rate=None):
     """将一章文本转为音频，按 MAX_CHARS_PER_CLIP 切分为多个片段（-1 则不分片）。
     同时收集句级时间戳，生成 SRT 字幕文件。"""
+    torch_module, _ = _load_torch_modules()
+    from subtitle import save_subtitle_file
+
     cosyvoice = get_tts()
     if sample_rate is None:
         sample_rate = cosyvoice.sample_rate
@@ -214,7 +251,7 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=None):
 
     silence = None
     if INTER_SENTENCE_SILENCE_MS > 0:
-        silence = torch.zeros(1, int(sample_rate * INTER_SENTENCE_SILENCE_MS / 1000))
+        silence = torch_module.zeros(1, int(sample_rate * INTER_SENTENCE_SILENCE_MS / 1000))
 
     # 在句尾标点处拆分为独立句子，确保每个句子有精确的时间戳
     raw_sentences = [s.strip() for s in re.split(r'(?<=[。！？])', text) if s.strip()]
@@ -241,7 +278,7 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=None):
         word_count += get_word_num(text=raw_sentence)
 
         if MAX_CHARS_PER_CLIP > 0 and word_count > MAX_CHARS_PER_CLIP:
-            combined = torch.cat(wav_chunks, dim=-1) if wav_chunks else None
+            combined = torch_module.cat(wav_chunks, dim=-1) if wav_chunks else None
             save_audio_file(combined, sample_rate, output_path, video_clip_index, exported_clip_indices)
             if export and subtitle_entries:
                 save_subtitle_file(subtitle_entries, output_path, video_clip_index)
@@ -252,7 +289,7 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=None):
             current_time = 0.0
             export = check_export_file_exists(output_path=output_path, video_clip_index=video_clip_index)
 
-    combined = torch.cat(wav_chunks, dim=-1) if wav_chunks else None
+    combined = torch_module.cat(wav_chunks, dim=-1) if wav_chunks else None
     save_audio_file(combined, sample_rate, output_path, video_clip_index, exported_clip_indices)
     if export and subtitle_entries:
         save_subtitle_file(subtitle_entries, output_path, video_clip_index)
@@ -322,21 +359,15 @@ _VALID_PINYIN_TOKENS = {
 # 需要拼音标注的高频多音字（仅标注 TTS 经常读错的字，避免过度标注影响自然度）
 _POLYPHONE_CHARS = set('校')
 
-# pypinyin 自定义词典：纠正 pypinyin 消歧错误的词组
-load_phrases_dict({
-    '精校': [['jīng'], ['jiào']],
-    '校对': [['jiào'], ['duì']],
-    '校勘': [['jiào'], ['kān']],
-})
-
-
 def annotate_polyphones(text: str) -> str:
     """对多音字注入 CosyVoice3 拼音 token，如 '给予' → '[j][ǐ]予'。"""
     if not text:
         return text
 
+    _ensure_polyphone_support_loaded()
+
     # 整句上下文消歧
-    tone_readings = pinyin(text, style=Style.TONE, heteronym=False, strict=True)
+    tone_readings = _pinyin(text, style=_style_tone, heteronym=False, strict=True)
 
     result = []
     text_pos = 0
@@ -362,8 +393,8 @@ def annotate_polyphones(text: str) -> str:
             result.append(char)
             continue
 
-        initial = to_initials(val, strict=False)
-        final = to_finals_tone(val, strict=False)
+        initial = _to_initials(val, strict=False)
+        final = _to_finals_tone(val, strict=False)
 
         # ü → v fallback (CosyVoice3 用 v 表示复合韵母中的 ü)
         if final not in _VALID_PINYIN_TOKENS:
@@ -622,7 +653,7 @@ def cli_main_process():
     mp3_bitrate = config['audio'].get('mp3_bitrate', '128k')
     if args.landscape:
         config['video']['orientation'] = 'landscape'
-    if args.video or audio_format == 'mp3':
+    if (args.video or audio_format == 'mp3') and not args.validate_paths:
         _check_ffmpeg()
     book_file_path = args.input_file_path
     if len(book_file_path) != 1 or '.' not in book_file_path[0]:
@@ -654,6 +685,31 @@ def cli_main_process():
     toc, output_targets, contents = construct_text_and_name(raw_data=raw_data, book_name=book_name)
     book_output_dir = _book_output_dir(book_name)
 
+    if not toc:
+        _report_error(args, "no_chapters", "未解析到任何章节，请检查文件内容")
+        return 1
+
+    if args.validate_paths:
+        validation_entries = build_path_validation_entries(OUTPUT_DIR, toc, output_targets)
+        if args.json:
+            print(json.dumps({
+                "status": "success",
+                "mode": "validate_paths",
+                "book_name": book_name,
+                "chapter_count": len(validation_entries),
+                "output_directory": str(book_output_dir),
+                "source_text_file": str(source_text_path),
+                "chapters": validation_entries,
+            }, ensure_ascii=False))
+        else:
+            console.print(f"  [green]输出[/green]  {book_output_dir}")
+            for item in validation_entries:
+                console.print(
+                    f"  [dim]{item['index']:>5}[/dim]: "
+                    f"{item['display_path']} -> {item['output_stem']}"
+                )
+        return 0
+
     # 显示目录供用户选择章节
     if not args.json and not args.quiet and toc:
         for k, v in toc.items():
@@ -666,10 +722,6 @@ def cli_main_process():
             if not args.json:
                 console.print(f"  [dim]上次生成到第 {idx} 章[/dim]")
             break
-
-    if not toc:
-        _report_error(args, "no_chapters", "未解析到任何章节，请检查文件内容")
-        return 1
 
     if args.range is not None:
         span = parse_range_string(args.range, total=max(toc.keys()))
@@ -716,6 +768,7 @@ def cli_main_process():
                 chapters_skipped += 1
 
             if args.video:
+                from video import transform_wav_to_video
                 i = 1
                 while True:
                     mp4_path = build_clip_output_path(output_path, i, '.mp4')
@@ -775,6 +828,7 @@ def parse_arguments():
         epilog='Examples:\n'
                '  txt2audio novel.txt --range all\n'
                '  txt2audio novel.epub --range all\n'
+               '  txt2audio novel.txt --validate-paths --json\n'
                '  txt2audio novel.txt --video --range 0~8 --json\n'
                '  txt2audio novel.txt --range all --speed 0.95 --set audio.mp3_bitrate=192k\n'
                '  txt2audio --dump-config --json\n',
@@ -802,6 +856,8 @@ def parse_arguments():
                         help='override any config.yaml value, e.g. --set tts.speed=0.9')
     parser.add_argument('--dump-config', action='store_true',
                         help='print effective config as YAML (or JSON with --json) and exit')
+    parser.add_argument('--validate-paths', action='store_true',
+                        help='parse chapters and output paths without loading the TTS model or generating media')
 
     args = parser.parse_args()
 
