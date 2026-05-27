@@ -7,6 +7,7 @@ import os
 import logging
 import functools
 from config import config
+from pathing import tmp_output_path
 
 logger = logging.getLogger('txt2audio')
 
@@ -92,9 +93,9 @@ def create_image_from_text(number, toc, audio, resources_dir, max_w=None, max_h=
     h = bottom - top
     draw_underlined_text(d, ((max_w - w) / 2, int(max_h * 0.77)), f'{number}', font=number_font)
 
-    result = f'{os.path.dirname(audio)}/cover.jpg'
+    result = Path(audio).with_name('cover.jpg')
     img.save(result, quality=config['video'].get('cover_jpeg_quality', 70))
-    return result
+    return str(result)
 
 
 @functools.lru_cache(maxsize=1)
@@ -111,12 +112,13 @@ def transform_wav_to_video(number, audio, toc, resources_dir):
     """wav + 封面图 -> mp4，成功后删除原 wav。使用临时文件确保原子写入。
     当 config.video.subtitles 为 true 且存在对应 SRT 文件时，烧入字幕。"""
     image = create_image_from_text(number=number, toc=toc, audio=audio, resources_dir=resources_dir)
-    video_path = str(Path(audio).with_suffix('.mp4'))
-    tmp_video_path = video_path.replace('.mp4', '.tmp.mp4')
+    audio_path = Path(audio)
+    video_path = audio_path.with_suffix('.mp4')
+    tmp_video_path = tmp_output_path(video_path)
     vc = config['video']
 
-    srt_path = str(Path(audio).with_suffix('.srt'))
-    use_subtitles = vc.get('subtitles', False) and os.path.isfile(srt_path)
+    srt_path = audio_path.with_suffix('.srt')
+    use_subtitles = vc.get('subtitles', False) and srt_path.is_file()
     if use_subtitles and not _ffmpeg_has_subtitles_filter():
         logger.warning('ffmpeg lacks libass (subtitles filter), disabling subtitle burn-in. '
                        'Install ffmpeg with libass from https://ffmpeg.org/download.html')
@@ -126,7 +128,7 @@ def transform_wav_to_video(number, audio, toc, resources_dir):
     framerate = max(vc.get('ffmpeg_video_framerate', 1), 10) if use_subtitles else vc.get('ffmpeg_video_framerate', 1)
 
     command = [
-        'ffmpeg', '-y', '-loop', '1', '-i', image, '-i', audio,
+        'ffmpeg', '-y', '-loop', '1', '-i', image, '-i', str(audio_path),
         '-r', str(framerate),
         '-c:v', vc['ffmpeg_video_codec'], '-tune', vc['ffmpeg_tune'],
         '-crf', str(vc.get('ffmpeg_video_crf', 28)), '-preset', vc.get('ffmpeg_video_preset', 'medium'),
@@ -136,21 +138,21 @@ def transform_wav_to_video(number, audio, toc, resources_dir):
     if use_subtitles:
         subtitle_style = vc.get('subtitle_style', 'FontSize=16,PrimaryColour=&Hffffff,Alignment=2,MarginV=95')
         # ffmpeg filter 语法转义（非 shell 转义）：反斜杠 → \\，冒号 → \:，单引号 → \'
-        escaped_srt = srt_path.replace('\\', '\\\\').replace(':', r'\:').replace("'", r"\'")
+        escaped_srt = str(srt_path).replace('\\', '\\\\').replace(':', r'\:').replace("'", r"\'")
         command += ['-vf', f"subtitles='{escaped_srt}':force_style='{subtitle_style}':wrap_unicode=1"]
-    command += ['-shortest', '-movflags', '+faststart', tmp_video_path]
+    command += ['-shortest', '-movflags', '+faststart', str(tmp_video_path)]
 
     logger.debug(f'ffmpeg command: {command}')
     ret = subprocess.run(command, capture_output=True)
-    logger.debug(ret.stdout.decode())
+    logger.debug(ret.stdout.decode(errors='replace'))
     if ret.returncode == 0:
         os.replace(tmp_video_path, video_path)
-        os.remove(audio)
+        os.remove(audio_path)
         # 清理字幕文件
-        if os.path.isfile(srt_path):
+        if srt_path.is_file():
             os.remove(srt_path)
     else:
-        if os.path.isfile(tmp_video_path):
+        if tmp_video_path.is_file():
             os.remove(tmp_video_path)
         logger.error(f'ffmpeg failed (code {ret.returncode}), keeping {audio}')
-        logger.error(ret.stderr.decode())
+        logger.error(ret.stderr.decode(errors='replace'))

@@ -1,7 +1,9 @@
 import os
 import re
+from pathlib import Path
 
 from config import config
+from pathing import build_clip_output_path, tmp_output_path
 
 
 _STRIP_EDGE_PUNCT = '，。、；：—'  # 装饰/节奏性标点，字幕帧首尾去掉；？！…… 保留
@@ -79,8 +81,9 @@ def save_subtitle_file(entries, output_path, clip_index):
     max_lines = config['video'].get('subtitle_max_lines', 2)
     orientation = config['video'].get('orientation', 'portrait')
     wrap_width = max_chars_per_line if orientation == 'portrait' else max_chars_per_line * max_lines
-    srt_path = f'{output_path}-{clip_index}.srt'
-    tmp_path = srt_path.replace('.srt', '.tmp.srt')
+    output_stem = Path(output_path)
+    srt_path = build_clip_output_path(output_stem, clip_index, '.srt')
+    tmp_path = tmp_output_path(srt_path)
     with open(tmp_path, 'w', encoding='utf-8') as f:
         for i, (start, end, text) in enumerate(entries, 1):
             f.write(f'{i}\n')

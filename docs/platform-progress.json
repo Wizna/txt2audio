@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-05-26",
+  "goal": "Support macOS and Windows with verified path handling, config overrides, and media export workflows.",
+  "target_matrix": {
+    "macos": {
+      "python": ["3.11", "3.12"],
+      "status": "in_progress"
+    },
+    "windows_x64": {
+      "python": ["3.11", "3.12"],
+      "status": "in_progress"
+    }
+  },
+  "tracks": [
+    {
+      "id": "metadata-support-boundary",
+      "title": "Constrain declared support boundary",
+      "status": "in_progress",
+      "notes": [
+        "Updated requires-python to >=3.11,<3.13 in pyproject.toml.",
+        "README support boundary update is still pending."
+      ]
+    },
+    {
+      "id": "safe-output-paths",
+      "title": "Decouple display titles from filesystem-safe output paths",
+      "status": "completed",
+      "notes": [
+        "Added src/pathing.py with Windows-invalid character sanitization and reserved-name handling.",
+        "Output targets now use sanitized relative paths while TOC display text remains unchanged.",
+        "Collisions after sanitization now get deterministic numeric suffixes."
+      ]
+    },
+    {
+      "id": "path-derived-outputs",
+      "title": "Use Path-driven derived output files",
+      "status": "completed",
+      "notes": [
+        "Converted tmp/media/subtitle/cover path derivation to Path-based helpers.",
+        "Atomic write behavior remains tmp -> move/replace."
+      ]
+    },
+    {
+      "id": "config-path-normalization",
+      "title": "Normalize config paths and refresh runtime overrides",
+      "status": "completed",
+      "notes": [
+        "Added normalize_config_paths() and re-run it after CLI overrides.",
+        "Runtime globals now refresh for resources/output/model/speaker/prompt settings."
+      ]
+    },
+    {
+      "id": "ffmpeg-subtitle-filter",
+      "title": "Harden ffmpeg subtitle filter path escaping",
+      "status": "pending",
+      "notes": [
+        "Current escaping is insufficient for Windows drive-letter and filtergraph edge cases."
+      ]
+    },
+    {
+      "id": "python-compat-warnings",
+      "title": "Remove Python compatibility warnings",
+      "status": "completed",
+      "notes": [
+        "Fixed invalid escape sequence in get_delimiter_pattern().",
+        "compileall no longer reports that warning."
+      ]
+    },
+    {
+      "id": "verification",
+      "title": "Add repeatable verification",
+      "status": "in_progress",
+      "notes": [
+        "Added unittest coverage for path sanitization and runtime path resolution.",
+        "Verified compileall and `uv run txt2audio --dump-config --json` in the current workspace.",
+        "Real macOS/Windows media generation smoke runs are still pending."
+      ]
+    }
+  ],
+  "latest_work": [
+    "Created implementation plan document at docs/platform-support-plan.md.",
+    "Added src/pathing.py and switched main output/media path derivation to it.",
+    "Normalized config paths after runtime overrides and refreshed module globals.",
+    "Constrained requires-python to >=3.11,<3.13 and added unittest coverage for path helpers."
+  ],
+  "known_open_risks": [
+    "Windows subtitle burn-in is still blocked on ffmpeg filter escaping hardening.",
+    "README has not yet been updated to reflect the tightened platform support boundary.",
+    "Real platform verification has not run yet in this workspace."
+  ]
+}

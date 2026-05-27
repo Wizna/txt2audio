@@ -24,7 +24,8 @@ import torch
 import torchaudio
 from video import transform_wav_to_video
 from subtitle import save_subtitle_file
-from config import config, PROJECT_ROOT
+from config import config, PROJECT_ROOT, normalize_config_paths
+from pathing import build_clip_output_path, build_display_path, build_output_relpath, tmp_output_path
 
 logger = logging.getLogger('txt2audio')
 console = Console(stderr=True)
@@ -44,6 +45,14 @@ MAX_CHARS_PER_CLIP = config['audio']['max_chars_per_clip']
 SPEED = config['tts'].get('speed', 1.0)
 INTER_SENTENCE_SILENCE_MS = config['tts'].get('inter_sentence_silence_ms', 0)
 _tts = None
+
+
+def _decode_subprocess_output(data):
+    return data.decode(errors='replace')
+
+
+def _book_output_dir(book_name: str) -> Path:
+    return OUTPUT_DIR / build_output_relpath([book_name], set())
 
 
 def get_tts():
@@ -135,48 +144,51 @@ def save_audio_file(wav_tensor, sample_rate, output_path: str, video_clip_index:
     if wav_tensor is None or wav_tensor.numel() == 0:
         return
     export_indices.append(video_clip_index)
-    audio_file_path = f'{output_path}-{video_clip_index}.wav'
-    tmp_path = audio_file_path.replace('.wav', '.tmp.wav')
+    output_stem = Path(output_path)
+    audio_file_path = build_clip_output_path(output_stem, video_clip_index, '.wav')
+    tmp_path = tmp_output_path(audio_file_path)
     if wav_tensor.dim() == 1:
         wav_tensor = wav_tensor.unsqueeze(0)
-    torchaudio.save(tmp_path, wav_tensor, sample_rate)
+    torchaudio.save(str(tmp_path), wav_tensor, sample_rate)
     shutil.move(tmp_path, audio_file_path)
 
 
 def convert_wav_to_mp3(wav_path, bitrate='128k'):
     """WAV → MP3，成功后删除原 WAV。使用临时文件确保原子写入。"""
-    mp3_path = str(Path(wav_path).with_suffix('.mp3'))
-    tmp_path = mp3_path.replace('.mp3', '.tmp.mp3')
+    wav_path = Path(wav_path)
+    mp3_path = wav_path.with_suffix('.mp3')
+    tmp_path = tmp_output_path(mp3_path)
     ret = _subprocess.run(
-        ['ffmpeg', '-y', '-i', wav_path, '-codec:a', 'libmp3lame', '-b:a', bitrate, tmp_path],
+        ['ffmpeg', '-y', '-i', str(wav_path), '-codec:a', 'libmp3lame', '-b:a', bitrate, str(tmp_path)],
         capture_output=True
     )
     if ret.returncode == 0:
         shutil.move(tmp_path, mp3_path)
         os.remove(wav_path)
-        return mp3_path
+        return str(mp3_path)
     else:
-        if os.path.isfile(tmp_path):
+        if tmp_path.is_file():
             os.remove(tmp_path)
         logger.warning(f'MP3 conversion failed (code {ret.returncode}), keeping {wav_path}')
-        logger.warning(ret.stderr.decode())
-        return wav_path
+        logger.warning(_decode_subprocess_output(ret.stderr))
+        return str(wav_path)
 
 
 def check_export_file_exists(output_path, video_clip_index):
     """返回 True 表示需要导出（文件不存在），用于断点续生成。
     自动清理中断留下的临时文件和空文件。"""
-    base = f'{output_path}-{video_clip_index}'
+    output_stem = Path(output_path)
     # 清理中断留下的临时文件
-    for ext in ('.tmp.wav', '.tmp.mp3', '.tmp.mp4', '.tmp.srt'):
-        tmp = base + ext
-        if os.path.isfile(tmp):
+    for ext in ('.wav', '.mp3', '.mp4', '.srt'):
+        tmp = tmp_output_path(build_clip_output_path(output_stem, video_clip_index, ext))
+        if tmp.is_file():
             os.remove(tmp)
             logger.debug(f"Removed incomplete temp file: {tmp}")
     # 检查已完成的文件
-    for path in (base + '.mp4', base + '.mp3', base + '.wav'):
-        if os.path.isfile(path):
-            if os.path.getsize(path) == 0:
+    for ext in ('.mp4', '.mp3', '.wav'):
+        path = build_clip_output_path(output_stem, video_clip_index, ext)
+        if path.is_file():
+            if path.stat().st_size == 0:
                 os.remove(path)
                 logger.debug(f"Removed empty file: {path}")
                 continue
@@ -378,19 +390,19 @@ def annotate_polyphones(text: str) -> str:
     return ''.join(result)
 
 
-def generate_chapter(chapter_name, last_special_delimiter):
-    """从 chapter_structure 生成输出路径，如 "书名/第一卷/第一章"。"""
+def generate_chapter_parts(chapter_name, last_special_delimiter):
+    """从 chapter_structure 生成章节路径片段，如 [书名, 第一卷, 第一章]。"""
     if last_special_delimiter:  # 序/楔子/后记等，包含末位 special slot
-        combined_name = '/'.join([i for i in chapter_name if i])
+        parts = [i for i in chapter_name if i]
     else:
-        combined_name = '/'.join([i for i in chapter_name[:-1] if i])
+        parts = [i for i in chapter_name[:-1] if i]
 
     # 引言内容（出现在第一个卷/章/序之前的文本）只有书名没有子路径，
     # 需要加上"引言"保证输出到书目录内部，而不是和书目录同级
-    if combined_name and '/' not in combined_name:
-        combined_name += '/引言'
+    if len(parts) == 1:
+        parts.append('引言')
 
-    return combined_name
+    return parts
 
 
 def check_special_delimiter(text):
@@ -409,11 +421,12 @@ def empty_structure(chapter_structure, start):
 
 
 def get_delimiter_pattern(delimiter):
-    return f"(^|\s)(第[零一二三四五六七八九十]+{delimiter}|{delimiter}[零一二三四五六七八九十]+)($|\s)"
+    return rf"(^|\s)(第[零一二三四五六七八九十]+{delimiter}|{delimiter}[零一二三四五六七八九十]+)($|\s)"
 
 
 def construct_text_and_name(raw_data, book_name: str):
     table_of_contents = {}
+    output_targets = {}
     contents_of_chapter = {}
     toc_index = 0
     # [书名, 卷, 章, special_delimiter]，用于拼接输出路径
@@ -421,6 +434,7 @@ def construct_text_and_name(raw_data, book_name: str):
     contents = []
     input_text_lines = re.split('\r\n|\n', raw_data)
     last_special_delimiter = False
+    used_output_paths = set()
 
     for line in input_text_lines:
         line = line.strip()
@@ -450,10 +464,11 @@ def construct_text_and_name(raw_data, book_name: str):
 
         if new_chapter:
             if contents:
-                chapter_name = generate_chapter(chapter_name=chapter_structure,
-                                                last_special_delimiter=last_special_delimiter)
-                if chapter_name:
-                    table_of_contents[toc_index] = chapter_name
+                chapter_parts = generate_chapter_parts(chapter_name=chapter_structure,
+                                                       last_special_delimiter=last_special_delimiter)
+                if chapter_parts:
+                    table_of_contents[toc_index] = build_display_path(chapter_parts)
+                    output_targets[toc_index] = build_output_relpath(chapter_parts, used_output_paths)
                     contents_of_chapter[toc_index] = contents
                     toc_index += 1
                 last_special_delimiter = False
@@ -474,21 +489,23 @@ def construct_text_and_name(raw_data, book_name: str):
             last_special_delimiter = True
 
     if contents:
-        chapter_name = generate_chapter(chapter_name=chapter_structure,
-                                        last_special_delimiter=last_special_delimiter)
-        if chapter_name:
-            table_of_contents[toc_index] = chapter_name
+        chapter_parts = generate_chapter_parts(chapter_name=chapter_structure,
+                                               last_special_delimiter=last_special_delimiter)
+        if chapter_parts:
+            table_of_contents[toc_index] = build_display_path(chapter_parts)
+            output_targets[toc_index] = build_output_relpath(chapter_parts, used_output_paths)
             contents_of_chapter[toc_index] = contents
             toc_index += 1
 
-    toc_file_path = str(OUTPUT_DIR / book_name / '目录.txt')
+    toc_file_path = _book_output_dir(book_name) / '目录.txt'
     save_table_of_contents(file_path=toc_file_path, table_of_contents=table_of_contents)
 
-    return table_of_contents, contents_of_chapter
+    return table_of_contents, output_targets, contents_of_chapter
 
 
 def save_table_of_contents(file_path, table_of_contents: Dict):
-    Path(os.path.dirname(file_path)).mkdir(parents=True, exist_ok=True)
+    file_path = Path(file_path)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
     with open(file_path, 'w', encoding='utf-8') as f:
         f.write('\ufeff')  # UTF-8 BOM，帮助 macOS Finder 正确识别编码
         for k, v in table_of_contents.items():
@@ -519,14 +536,15 @@ def _format_duration(seconds):
 
 def _apply_config_overrides(args):
     """将 CLI 传入的配置覆盖应用到全局 config，并刷新模块级常量。"""
-    global OUTPUT_DIR, SPEED, INTER_SENTENCE_SILENCE_MS, MAX_CHARS_PER_CLIP
+    global RESOURCES_DIR, OUTPUT_DIR, MODEL_DIR, SPEAKER_WAV, PROMPT_TEXT
+    global SPEED, INTER_SENTENCE_SILENCE_MS, MAX_CHARS_PER_CLIP
 
     if args.speed is not None:
         config['tts']['speed'] = args.speed
     if args.output_format is not None:
         config['audio']['output_format'] = args.output_format
     if args.output_dir is not None:
-        config['paths']['output_dir'] = Path(args.output_dir).resolve()
+        config['paths']['output_dir'] = args.output_dir
 
     for override in args.set:
         key, _, value = override.partition('=')
@@ -550,8 +568,14 @@ def _apply_config_overrides(args):
             value = float(value)
         d[parts[-1]] = value
 
+    normalize_config_paths(config)
+
     # 刷新模块级常量
+    RESOURCES_DIR = config['paths']['resources_dir']
     OUTPUT_DIR = config['paths']['output_dir']
+    MODEL_DIR = config['tts']['model_dir']
+    SPEAKER_WAV = config['tts']['speaker_wav']
+    PROMPT_TEXT = config['tts']['prompt_text']
     SPEED = config['tts'].get('speed', 1.0)
     INTER_SENTENCE_SILENCE_MS = config['tts'].get('inter_sentence_silence_ms', 0)
     MAX_CHARS_PER_CLIP = config['audio']['max_chars_per_clip']
@@ -627,7 +651,8 @@ def cli_main_process():
         status = '已生成' if generated_txt else '复用'
         console.print(f"  [dim]{status} 文本: {source_text_path}[/dim]")
 
-    toc, contents = construct_text_and_name(raw_data=raw_data, book_name=book_name)
+    toc, output_targets, contents = construct_text_and_name(raw_data=raw_data, book_name=book_name)
+    book_output_dir = _book_output_dir(book_name)
 
     # 显示目录供用户选择章节
     if not args.json and not args.quiet and toc:
@@ -636,8 +661,8 @@ def cli_main_process():
 
     # 找到最后已生成的章节，提示用户断点位置
     for idx in sorted(toc.keys(), reverse=True):
-        output_path = str(OUTPUT_DIR / toc[idx])
-        if os.path.isfile(f'{output_path}-1.wav') or os.path.isfile(f'{output_path}-1.mp4') or os.path.isfile(f'{output_path}-1.mp3'):
+        output_path = OUTPUT_DIR / output_targets[idx]
+        if any(build_clip_output_path(output_path, 1, ext).is_file() for ext in ('.wav', '.mp4', '.mp3')):
             if not args.json:
                 console.print(f"  [dim]上次生成到第 {idx} 章[/dim]")
             break
@@ -679,10 +704,10 @@ def cli_main_process():
             chapter_title = toc[idx].split('/')[-1]
             progress.update(task, description=f"[cyan]{chapter_title}[/cyan]")
 
-            output_path = str(OUTPUT_DIR / toc[idx])
-            Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
+            output_path = OUTPUT_DIR / output_targets[idx]
+            output_path.parent.mkdir(parents=True, exist_ok=True)
 
-            clip_num = generate_audio_clip(text=''.join(contents[idx]), output_path=output_path)
+            clip_num = generate_audio_clip(text=''.join(contents[idx]), output_path=str(output_path))
 
             if clip_num:
                 chapters_generated += 1
@@ -693,30 +718,30 @@ def cli_main_process():
             if args.video:
                 i = 1
                 while True:
-                    mp4_path = f'{output_path}-{i}.mp4'
-                    wav_path = f'{output_path}-{i}.wav'
-                    mp3_path = f'{output_path}-{i}.mp3'
-                    if os.path.isfile(mp4_path):
+                    mp4_path = build_clip_output_path(output_path, i, '.mp4')
+                    wav_path = build_clip_output_path(output_path, i, '.wav')
+                    mp3_path = build_clip_output_path(output_path, i, '.mp3')
+                    if mp4_path.is_file():
                         i += 1
                         continue
-                    if os.path.isfile(wav_path):
-                        transform_wav_to_video(number=idx, audio=wav_path, toc=toc[idx],
+                    if wav_path.is_file():
+                        transform_wav_to_video(number=idx, audio=str(wav_path), toc=toc[idx],
                                                resources_dir=RESOURCES_DIR)
-                    elif os.path.isfile(mp3_path):
-                        transform_wav_to_video(number=idx, audio=mp3_path, toc=toc[idx],
+                    elif mp3_path.is_file():
+                        transform_wav_to_video(number=idx, audio=str(mp3_path), toc=toc[idx],
                                                resources_dir=RESOURCES_DIR)
                     else:
                         break
                     i += 1
             elif audio_format == 'mp3':
                 for i in clip_num:
-                    convert_wav_to_mp3(f'{output_path}-{i}.wav', bitrate=mp3_bitrate)
+                    convert_wav_to_mp3(build_clip_output_path(output_path, i, '.wav'), bitrate=mp3_bitrate)
 
             progress.advance(task)
 
     elapsed = time.time() - start_time
     fmt = 'mp4' if args.video else audio_format
-    out_dir = OUTPUT_DIR / book_name
+    out_dir = book_output_dir
 
     if args.json:
         result = {
