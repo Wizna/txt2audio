@@ -55,9 +55,9 @@ uv run python -c "from huggingface_hub import snapshot_download; snapshot_downlo
 
 不同系统的安装方式不同，请使用各自平台对应的包管理器或安装器。
 
-> **已验证平台**：本项目的音频生成（CosyVoice3 0.5B CPU 推理）和视频转换目前已在 macOS Apple Silicon（M1/M2/M3/M4）上测试通过，16GB 内存即可流畅运行。
+> **已验证平台**：本项目的音频生成（CosyVoice3 0.5B CPU 推理）、MP3 转换、MP4 导出和字幕烧录目前已在 macOS Apple Silicon（M1/M2/M3/M4）上测试通过，16GB 内存即可流畅运行。
 >
-> **计划支持平台**：Windows x64 的路径兼容与 CLI 基础能力已经开始适配，但完整媒体生成链路仍需进一步冒烟验证后再作为正式支持声明。
+> **计划支持平台**：Windows x64 的路径兼容、CLI 基础能力和字幕过滤器转义已经适配，但完整媒体生成链路仍需进一步冒烟验证后再作为正式支持声明。
 >
 > **Homebrew ffmpeg 注意事项**：如果你使用 Homebrew 安装 ffmpeg，默认不含 libass，字幕烧录会静默回退为无字幕模式。
 >

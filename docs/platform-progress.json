@@ -1,15 +1,24 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-05-27",
+  "updated_at": "2026-05-28",
   "goal": "Support macOS and Windows with verified path handling, config overrides, and media export workflows.",
   "target_matrix": {
     "macos": {
       "python": ["3.11", "3.12"],
-      "status": "in_progress"
+      "status": "smoke_test_passed",
+      "notes": [
+        "Path handling, config normalization, ffmpeg subtitle filter escaping, and lightweight CLI validation are implemented.",
+        "macOS Apple Silicon smoke verification passed for chapter 0 of 《亵渎》 across wav, mp3, mp4, and mp4 with subtitle burn-in.",
+        "The exported subtitle video path completed with tmp -> mp4 replacement and cleaned intermediate wav/srt files."
+      ]
     },
     "windows_x64": {
       "python": ["3.11", "3.12"],
-      "status": "in_progress"
+      "status": "implementation_complete_pending_smoke_test",
+      "notes": [
+        "Windows-specific filename sanitization, reserved-name handling, and subtitle filter escaping are implemented with unit coverage.",
+        "True runtime verification on a drive-letter path with ffmpeg/libass is still pending."
+      ]
     }
   },
   "tracks": [
@@ -55,7 +64,7 @@
       "title": "Harden ffmpeg subtitle filter path escaping",
       "status": "completed",
       "notes": [
-        "Added a dedicated subtitles filter builder in src/video.py.",
+        "Added a dedicated subtitles filter builder in src/ffmpeg_filters.py and wired it into src/video.py.",
         "Normalize subtitle paths to forward-slash form before escaping.",
         "Escape filename/style values for both ffmpeg option parsing and filtergraph parsing.",
         "Added unit coverage for Windows drive letters, spaces, quotes, brackets, commas, and semicolons."
@@ -73,25 +82,43 @@
     {
       "id": "verification",
       "title": "Add repeatable verification",
-      "status": "in_progress",
+      "status": "partially_completed",
       "notes": [
         "Added unittest coverage for path sanitization and runtime path resolution.",
         "Added unittest coverage for ffmpeg subtitles filter escaping.",
+        "Added unittest coverage for the lightweight validation mode.",
         "Verified compileall and `uv run txt2audio --dump-config --json` in the current workspace.",
-        "Added a CLI-level `--validate-paths` mode for path/config verification without loading the TTS model.",
-        "Real macOS/Windows media generation smoke runs are still pending."
+        "Verified the CLI-level `--validate-paths` mode end-to-end without loading the TTS model.",
+        "Verified macOS Apple Silicon media generation on chapter 0 of 《亵渎》 for wav, mp3, mp4, and mp4+subtitles.",
+        "Windows media generation smoke runs for wav/mp3/mp4/mp4+subtitles are still pending."
       ]
     }
   ],
   "latest_work": [
-    "Created implementation plan document at docs/platform-support-plan.md.",
     "Added src/pathing.py and switched main output/media path derivation to it.",
     "Normalized config paths after runtime overrides and refreshed module globals.",
-    "Constrained requires-python to >=3.11,<3.13 and added unittest coverage for path helpers.",
-    "Added a dedicated ffmpeg subtitles filter builder and updated README support boundaries.",
-    "Added a lightweight --validate-paths CLI mode for cross-platform path verification."
+    "Constrained requires-python to >=3.11,<3.13 and updated README support boundaries.",
+    "Added src/ffmpeg_filters.py and wired subtitle burn-in through a dedicated escaping helper.",
+    "Added a lightweight --validate-paths CLI mode and deferred heavy imports so path validation stays fast.",
+    "Verified compileall, unittest coverage, config dump, and CLI path validation in the current workspace.",
+    "Ran a real macOS Apple Silicon smoke test on chapter 0 of 《亵渎》 and confirmed wav, mp3, mp4, and mp4 subtitle burn-in outputs."
   ],
   "known_open_risks": [
-    "Real platform verification has not run yet in this workspace."
-  ]
+    "Windows x64 runtime verification is still missing for actual media generation, drive-letter paths, and subtitle burn-in with ffmpeg/libass."
+  ],
+  "next_step": {
+    "title": "Run real media smoke tests on Windows x64",
+    "why": "macOS media generation has been verified locally, so the remaining platform risk is Windows runtime behavior for TTS generation, ffmpeg conversion, and subtitle burn-in on drive-letter paths.",
+    "commands": [
+      "uv run txt2audio <sample>.txt --range all --output-format wav --json",
+      "uv run txt2audio <sample>.txt --range all --output-format mp3 --json",
+      "uv run txt2audio <sample>.txt --video --range all --json",
+      "uv run txt2audio <sample>.txt --video --range all --set video.subtitles=true --json"
+    ],
+    "windows_focus": [
+      "Use output directories with spaces and Chinese characters.",
+      "Use a drive-letter absolute path.",
+      "Use chapter titles containing : ? * | [ ] '."
+    ]
+  }
 }
