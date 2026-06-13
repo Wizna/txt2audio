@@ -96,11 +96,13 @@ def get_tts():
             _tts = AutoModel(model_dir=MODEL_DIR)
             _tts.add_zero_shot_spk(PROMPT_TEXT, SPEAKER_WAV, 'narrator')
         except Exception as e:
-            logger.error(f"Failed to load CosyVoice model from: {MODEL_DIR}")
-            logger.error(f"Error: {e}")
-            logger.error("Please ensure the model is downloaded:")
-            logger.error("  uv run python -c \"from huggingface_hub import snapshot_download; snapshot_download('FunAudioLLM/Fun-CosyVoice3-0.5B-2512', local_dir='pretrained_models/Fun-CosyVoice3-0.5B')\"")
-            raise SystemExit(1)
+            raise RuntimeError(
+                f"无法加载 CosyVoice 模型: {MODEL_DIR}。请确认模型已下载；可运行："
+                "uv run python -c \"from huggingface_hub import snapshot_download; "
+                "snapshot_download('FunAudioLLM/Fun-CosyVoice3-0.5B-2512', "
+                "local_dir='pretrained_models/Fun-CosyVoice3-0.5B')\"。"
+                f"原始错误: {e}"
+            ) from e
     return _tts
 
 book_delimiter = config['text_processing']['book_delimiter']
@@ -205,10 +207,9 @@ def convert_wav_to_mp3(wav_path, bitrate='128k'):
         if tmp_path.is_file():
             os.remove(tmp_path)
         stderr = _decode_subprocess_output(ret.stderr).strip()
-        logger.error(f'MP3 conversion failed (code {ret.returncode}), keeping {wav_path}')
         if stderr:
-            logger.error(stderr)
-        raise RuntimeError(f'MP3 conversion failed for {wav_path} (code {ret.returncode})')
+            logger.debug(stderr)
+        raise RuntimeError(_subprocess_failure_message('MP3 conversion failed', ret.returncode, stderr))
 
 
 def check_export_file_exists(output_path, video_clip_index):
@@ -565,10 +566,11 @@ def _check_ffmpeg():
     try:
         _subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
     except (FileNotFoundError, _subprocess.CalledProcessError):
-        logger.error("ffmpeg not found. Please install ffmpeg.")
-        logger.error("  macOS:   brew install ffmpeg")
-        logger.error("  Windows: winget install ffmpeg  (or download from https://ffmpeg.org/download.html)")
-        raise SystemExit(1)
+        raise RuntimeError(
+            "未检测到 ffmpeg。请先安装 ffmpeg："
+            "macOS: brew install ffmpeg；"
+            "Windows: winget install ffmpeg，或从 https://ffmpeg.org/download.html 下载。"
+        )
 
 
 def _format_duration(seconds):
@@ -638,6 +640,37 @@ def _report_error(args, error_code, message):
         _json_error(error_code, message)
     else:
         console.print(f"[bold red]Error:[/bold red] {message}")
+
+
+def _last_stderr_line(stderr):
+    for line in reversed(stderr.splitlines()):
+        line = line.strip()
+        if line:
+            return line
+    return ''
+
+
+def _subprocess_failure_message(action, returncode, stderr):
+    detail = _last_stderr_line(stderr)
+    if detail:
+        return f'{action} (code {returncode}): {detail}'
+    return f'{action} (code {returncode})'
+
+
+def _should_show_catalog(args):
+    return not args.json and not args.plan_json and not args.quiet and args.range is None
+
+
+def _should_show_resume_hint(args):
+    return _should_show_catalog(args)
+
+
+def _should_show_chapter_progress(args, chapter_indices):
+    return not args.json and not args.quiet and len(chapter_indices) > 1
+
+
+def _should_print_summary(args, conversion_failures):
+    return not args.json and (not args.quiet or bool(conversion_failures))
 
 
 def _existing_outputs(output_path: Path) -> list[dict]:
@@ -744,8 +777,6 @@ def cli_main_process():
     mp3_bitrate = config['audio'].get('mp3_bitrate', '128k')
     if args.landscape:
         config['video']['orientation'] = 'landscape'
-    if (args.video or audio_format == 'mp3') and not (args.validate_paths or args.plan_json):
-        _check_ffmpeg()
     book_file_path = args.input_file_path
     if len(book_file_path) != 1 or '.' not in book_file_path[0]:
         _report_error(args, "invalid_args", "输入一个文件路径，且必须包含文件后缀")
@@ -760,7 +791,7 @@ def cli_main_process():
         _report_error(args, "unsupported_input_format", f"不支持的输入格式: {input_path.suffix or '无后缀'}，仅支持 {supported}")
         return 1
 
-    if not args.json and not args.plan_json:
+    if not args.json and not args.plan_json and not args.quiet:
         console.print(f"\n[bold]{book_name}[/bold]")
 
     try:
@@ -769,7 +800,7 @@ def cli_main_process():
         _report_error(args, "input_conversion_failed", str(e))
         return 1
 
-    if not args.json and not args.plan_json and input_path.suffix.lower() != '.txt':
+    if not args.json and not args.plan_json and not args.quiet and input_path.suffix.lower() != '.txt':
         status = '已生成' if generated_txt else '复用'
         console.print(f"  [dim]{status} 文本: {source_text_path}[/dim]")
 
@@ -802,7 +833,7 @@ def cli_main_process():
         return 0
 
     # 显示目录供用户选择章节
-    if not args.json and not args.plan_json and not args.quiet and toc:
+    if _should_show_catalog(args) and toc:
         for k, v in toc.items():
             console.print(f"  [dim]{k:>5}[/dim]: {v}")
 
@@ -810,7 +841,7 @@ def cli_main_process():
     for idx in sorted(toc.keys(), reverse=True):
         output_path = OUTPUT_DIR / output_targets[idx]
         if any(build_clip_output_path(output_path, 1, ext).is_file() for ext in ('.wav', '.mp4', '.mp3')):
-            if not args.json and not args.plan_json:
+            if _should_show_resume_hint(args):
                 console.print(f"  [dim]上次生成到第 {idx} 章[/dim]")
             break
 
@@ -837,6 +868,13 @@ def cli_main_process():
         print(json.dumps(plan, ensure_ascii=False))
         return 0
 
+    if args.video or audio_format == 'mp3':
+        try:
+            _check_ffmpeg()
+        except RuntimeError as e:
+            _report_error(args, "ffmpeg_not_found", str(e))
+            return 1
+
     start_time = time.time()
     chapters_generated = 0
     chapters_skipped = 0
@@ -845,7 +883,7 @@ def cli_main_process():
     skipped_chapters = []
     conversion_failures = []
     chapter_results = []
-    show_progress = not args.json and not args.quiet and len(chapter_indices) > 1
+    show_progress = _should_show_chapter_progress(args, chapter_indices)
     generate_subtitles = args.srt or args.keep_srt or (args.video and config['video'].get('subtitles', False))
 
     with Progress(
@@ -869,11 +907,15 @@ def cli_main_process():
             chapter_failures = []
             chapter_existing_outputs = []
 
-            clip_num = generate_audio_clip(
-                text=''.join(contents[idx]),
-                output_path=str(output_path),
-                generate_subtitles=generate_subtitles,
-            )
+            try:
+                clip_num = generate_audio_clip(
+                    text=''.join(contents[idx]),
+                    output_path=str(output_path),
+                    generate_subtitles=generate_subtitles,
+                )
+            except RuntimeError as e:
+                _report_error(args, "tts_generation_failed", str(e))
+                return 1
 
             if clip_num:
                 chapters_generated += 1
@@ -1030,7 +1072,7 @@ def cli_main_process():
             result["error"] = "media_conversion_failed"
             result["failed_outputs"] = conversion_failures
         print(json.dumps(result, ensure_ascii=False))
-    else:
+    elif _should_print_summary(args, conversion_failures):
         summary = (
             f"[green]章节[/green]  {chapters_generated} 已生成, {chapters_skipped} 跳过\n"
             f"[green]片段[/green]  {total_clips}\n"

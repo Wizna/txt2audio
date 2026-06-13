@@ -11,6 +11,8 @@ from ffmpeg_filters import build_subtitles_filter
 from pathing import tmp_output_path
 
 logger = logging.getLogger('txt2audio')
+_warned_default_cover_fonts = False
+_warned_missing_subtitles_filter = False
 
 
 def draw_underlined_text(draw, pos, text, font, **options):
@@ -84,9 +86,11 @@ def create_image_from_text(number, toc, audio, resources_dir, max_w=None, max_h=
         number_font = ImageFont.truetype(str(resources_dir / 'DTM-Mono-1.otf'),
                                          int(config['video']['font_size_number'] * font_scale))
     except (OSError, IOError) as e:
-        logger.warning(f"Could not load custom fonts from {resources_dir}")
-        logger.warning(f"Error: {e}")
-        logger.warning("Falling back to default font. Video covers will use system default.")
+        global _warned_default_cover_fonts
+        if not _warned_default_cover_fonts:
+            logger.warning(f"无法加载视频封面自定义字体: {resources_dir}；已改用默认字体。")
+            logger.debug(f"Font loading error: {e}")
+            _warned_default_cover_fonts = True
         font = ImageFont.load_default()
         smaller_font = ImageFont.load_default()
         number_font = ImageFont.load_default()
@@ -147,8 +151,10 @@ def transform_wav_to_video(number, audio, toc, resources_dir, keep_subtitles=Fal
     srt_path = audio_path.with_suffix('.srt')
     use_subtitles = vc.get('subtitles', False) and srt_path.is_file()
     if use_subtitles and not _ffmpeg_has_subtitles_filter():
-        logger.warning('ffmpeg lacks libass (subtitles filter), disabling subtitle burn-in. '
-                       'Install ffmpeg with libass from https://ffmpeg.org/download.html')
+        global _warned_missing_subtitles_filter
+        if not _warned_missing_subtitles_filter:
+            logger.warning('当前 ffmpeg 缺少 subtitles 滤镜，本次运行将跳过字幕烧录。')
+            _warned_missing_subtitles_filter = True
         use_subtitles = False
 
     # 字幕需要更高帧率以精确显示/消失
@@ -180,8 +186,10 @@ def transform_wav_to_video(number, audio, toc, resources_dir, keep_subtitles=Fal
     else:
         if tmp_video_path.is_file():
             os.remove(tmp_video_path)
-        logger.error(f'ffmpeg failed (code {ret.returncode}), keeping {audio}')
         stderr = ret.stderr.decode(errors='replace').strip()
         if stderr:
-            logger.error(stderr)
-        raise RuntimeError(f'Video conversion failed for {audio} (code {ret.returncode})')
+            logger.debug(stderr)
+        detail = next((line.strip() for line in reversed(stderr.splitlines()) if line.strip()), '')
+        if detail:
+            raise RuntimeError(f'Video conversion failed (code {ret.returncode}): {detail}')
+        raise RuntimeError(f'Video conversion failed (code {ret.returncode})')

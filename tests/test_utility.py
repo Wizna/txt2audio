@@ -341,6 +341,28 @@ class UtilityTests(unittest.TestCase):
         self.assertEqual(manifest['elapsed_seconds'], 1.2)
         self.assertEqual(manifest['chapters'][0]['status'], 'generated')
 
+    def test_output_policy_suppresses_non_interactive_noise(self):
+        interactive = SimpleNamespace(json=False, plan_json=False, quiet=False, range=None)
+        explicit_range = SimpleNamespace(json=False, plan_json=False, quiet=False, range='all')
+        quiet = SimpleNamespace(json=False, plan_json=False, quiet=True, range='all')
+
+        self.assertTrue(utility._should_show_catalog(interactive))
+        self.assertFalse(utility._should_show_catalog(explicit_range))
+        self.assertFalse(utility._should_show_catalog(quiet))
+        self.assertFalse(utility._should_show_chapter_progress(explicit_range, [0]))
+        self.assertTrue(utility._should_show_chapter_progress(explicit_range, [0, 1]))
+        self.assertFalse(utility._should_print_summary(quiet, []))
+        self.assertTrue(utility._should_print_summary(quiet, [{'message': 'failed'}]))
+
+    def test_subprocess_failure_message_uses_last_stderr_line(self):
+        message = utility._subprocess_failure_message(
+            'MP3 conversion failed',
+            1,
+            'ffmpeg version 7.0\nbad codec\nConversion failed!',
+        )
+
+        self.assertEqual(message, 'MP3 conversion failed (code 1): Conversion failed!')
+
 
 if __name__ == '__main__':
     unittest.main()
