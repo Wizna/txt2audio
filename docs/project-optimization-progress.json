@@ -180,8 +180,8 @@
       "implementation_notes": [
         "Added explicit --srt export and --keep-srt video subtitle retention flags.",
         "JSON results now include generated_outputs, skipped_chapters, and failed_outputs for clearer run accounting.",
+        "Added width-based cover title wrapping for long unspaced titles.",
         "Consider M4B or chapter manifest export.",
-        "Improve cover long-title wrapping and scaling.",
         "Human summaries now include the count of newly generated output files."
       ],
       "acceptance": [
@@ -198,7 +198,7 @@
     "result": "passed",
     "notes": [
         "compileall completed successfully.",
-            "unittest discover ran 25 tests successfully after P0, P1, run-plan, SRT flag, and output accounting additions.",
+            "unittest discover ran 26 tests successfully after P0, P1, run-plan, SRT flag, output accounting, and cover wrapping additions.",
             "Targeted P1 utility/subtitle coverage passed without loading the TTS model.",
             "`uv run txt2audio /private/tmp/txt2audio-plan-smoke.txt --plan-json --range all` returned a model-free plan JSON successfully.",
             "`uv run txt2audio /private/tmp/txt2audio-plan-smoke.txt --plan-json --range all --srt` reported subtitle export in the plan JSON."
@@ -206,7 +206,7 @@
   },
     "next_step": {
         "track_id": "product-extras",
-        "title": "Improve cover long-title wrapping and scaling",
-        "why": "Output accounting is implemented; the next actionable backlog item is making generated video covers more robust for long book and chapter titles."
+        "title": "Evaluate M4B or chapter manifest export",
+        "why": "Cover long-title wrapping is implemented; the remaining product backlog is optional export packaging such as M4B or chapter manifests."
     }
 }

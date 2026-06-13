@@ -11,6 +11,7 @@ from ffmpeg_filters import (  # noqa: E402
     normalize_subtitles_path,
     build_subtitles_filter,
 )
+from video import _wrap_text_to_width  # noqa: E402
 
 
 class VideoFilterTests(unittest.TestCase):
@@ -34,6 +35,18 @@ class VideoFilterTests(unittest.TestCase):
             "force_style=FontSize=22\\,PrimaryColour=&H00ffff\\,MarginV=95:"
             "wrap_unicode=1",
         )
+
+    def test_wrap_text_to_width_splits_long_unspaced_text(self):
+        class FakeDraw:
+            @staticmethod
+            def textbbox(xy, text, font):
+                return (0, 0, len(text) * 10, 10)
+
+        lines = _wrap_text_to_width(FakeDraw(), '这是一个非常非常长的章节标题', object(), 60)
+
+        self.assertGreater(len(lines), 1)
+        self.assertEqual(''.join(lines), '这是一个非常非常长的章节标题')
+        self.assertTrue(all(len(line) <= 6 for line in lines))
 
 
 if __name__ == '__main__':

@@ -34,6 +34,27 @@ def get_color_from_text(s, lightness=127):
     return r, g, b
 
 
+def _wrap_text_to_width(draw, text, font, max_width):
+    if not text:
+        return []
+    if draw.textbbox(xy=(0, 0), text=text, font=font)[2] <= max_width:
+        return [text]
+
+    lines = []
+    current = ''
+    for char in text:
+        candidate = current + char
+        left, top, right, bottom = draw.textbbox(xy=(0, 0), text=candidate, font=font)
+        if current and right - left > max_width:
+            lines.append(current)
+            current = char
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    return lines
+
+
 def create_image_from_text(number, toc, audio, resources_dir, max_w=None, max_h=None):
     """生成视频封面图，toc 格式为 "书名/卷名/章名"，cover.jpg 同目录复用。
     支持 portrait/landscape 方向，文字布局按比例自适应。"""
@@ -74,6 +95,8 @@ def create_image_from_text(number, toc, audio, resources_dir, max_w=None, max_h=
 
     current_h = int(max_h * 0.16)
     pad = int(max_h * 0.03)
+    max_text_width = int(max_w * 0.88)
+    text_bottom_limit = int(max_h * 0.72)
     for idx, sub_para in enumerate(toc.split('/')):
         sub_para = re.sub(r'（.+?）', ' ', sub_para)
         for line in sub_para.split(' '):
@@ -83,11 +106,14 @@ def create_image_from_text(number, toc, audio, resources_dir, max_w=None, max_h=
                 continue
 
             selected_font = font if idx == 0 else smaller_font
-            (left, top, right, bottom) = d.textbbox(xy=(0, 0), text=line, font=selected_font)
-            w = right - left
-            h = bottom - top
-            d.text(((max_w - w) / 2, current_h), line, font=selected_font)
-            current_h += h + pad
+            for wrapped_line in _wrap_text_to_width(d, line, selected_font, max_text_width):
+                (left, top, right, bottom) = d.textbbox(xy=(0, 0), text=wrapped_line, font=selected_font)
+                w = right - left
+                h = bottom - top
+                if current_h + h > text_bottom_limit:
+                    break
+                d.text(((max_w - w) / 2, current_h), wrapped_line, font=selected_font)
+                current_h += h + pad
 
     (left, top, right, bottom) = d.textbbox(xy=(0, 0), text=f'{number}', font=number_font)
     w = right - left
