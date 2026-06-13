@@ -109,7 +109,7 @@ def _ffmpeg_has_subtitles_filter():
         return False
 
 
-def transform_wav_to_video(number, audio, toc, resources_dir):
+def transform_wav_to_video(number, audio, toc, resources_dir, keep_subtitles=False):
     """wav + 封面图 -> mp4，成功后删除原 wav。使用临时文件确保原子写入。
     当 config.video.subtitles 为 true 且存在对应 SRT 文件时，烧入字幕。"""
     image = create_image_from_text(number=number, toc=toc, audio=audio, resources_dir=resources_dir)
@@ -147,8 +147,8 @@ def transform_wav_to_video(number, audio, toc, resources_dir):
     if ret.returncode == 0:
         os.replace(tmp_video_path, video_path)
         os.remove(audio_path)
-        # 清理字幕文件
-        if srt_path.is_file():
+        # 清理已烧入视频的字幕中间文件；显式保留时不删除。
+        if use_subtitles and not keep_subtitles and srt_path.is_file():
             os.remove(srt_path)
     else:
         if tmp_video_path.is_file():

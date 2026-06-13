@@ -78,9 +78,11 @@ git submodule update --init --recursive
 
 ```bash
 uv run txt2audio your_book.txt --range all              # 纯音频（默认 MP3）
+uv run txt2audio your_book.txt --range all --srt        # 纯音频 + SRT 字幕文件
 uv run txt2audio your_book.epub --range all             # 首次会先生成 your_book.txt2audio.txt
 uv run txt2audio your_book.mobi --range all             # 首次会先生成 your_book.txt2audio.txt
 uv run txt2audio your_book.txt --video --range all      # 音频 + 视频（MP4）
+uv run txt2audio your_book.txt --video --keep-srt --range all  # 视频 + 保留 SRT
 ```
 
 `epub` / `mobi` 输入会先调用 Calibre 的 `ebook-convert`，在原书文件同目录生成 `*.txt2audio.txt`。后续再次运行时会优先复用这个文本文件，因此你可以先手动修正文稿，再继续使用原始电子书路径执行转换。若输入本身就是 `.txt`，则不需要安装 Calibre。

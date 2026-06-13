@@ -88,6 +88,32 @@ class UtilityTests(unittest.TestCase):
             self.assertTrue(audio_path.is_file())
             self.assertFalse(audio_path.with_suffix('.mp4').exists())
 
+    def test_transform_wav_to_video_keeps_subtitle_when_requested(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            audio_path = Path(temp_dir) / 'chapter-1.wav'
+            audio_path.write_bytes(b'wav')
+            srt_path = audio_path.with_suffix('.srt')
+            srt_path.write_text('1\n00:00:00,000 --> 00:00:01,000\n你好\n', encoding='utf-8')
+            image_path = Path(temp_dir) / 'cover.jpg'
+            image_path.write_bytes(b'jpg')
+            tmp_mp4 = Path(temp_dir) / 'chapter-1.tmp.mp4'
+
+            def fake_run(command, capture_output=True, text=False, timeout=None):
+                if '-filters' in command:
+                    return SimpleNamespace(returncode=0, stdout=' subtitles ', stderr=b'')
+                tmp_mp4.write_bytes(b'mp4')
+                return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+
+            video._ffmpeg_has_subtitles_filter.cache_clear()
+            with patch.object(video, 'create_image_from_text', return_value=str(image_path)):
+                with patch.object(video.subprocess, 'run', side_effect=fake_run):
+                    video.transform_wav_to_video(0, str(audio_path), '书/章', Path(temp_dir), keep_subtitles=True)
+            video._ffmpeg_has_subtitles_filter.cache_clear()
+
+            self.assertTrue(srt_path.is_file())
+            self.assertFalse(audio_path.exists())
+            self.assertTrue(audio_path.with_suffix('.mp4').is_file())
+
     def test_generate_audio_clip_can_skip_subtitle_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             output_stem = Path(temp_dir) / 'chapter'
@@ -223,6 +249,25 @@ class UtilityTests(unittest.TestCase):
             self.assertTrue(plan['chapters'][0]['will_skip_existing'])
             self.assertEqual(plan['chapters'][0]['existing_outputs'][0]['path'], str(existing_mp3))
             self.assertTrue(tmp_mp3.exists())
+
+    def test_build_run_plan_reports_explicit_subtitle_export(self):
+        args = SimpleNamespace(video=False, srt=True, keep_srt=False)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            with patch.object(utility, 'OUTPUT_DIR', output_dir):
+                plan = utility._build_run_plan(
+                    args,
+                    {0: '书名/第一章'},
+                    {0: Path('书名', '第一章')},
+                    [0],
+                    '书名',
+                    output_dir / '书名',
+                    Path('/tmp/source.txt'),
+                )
+
+        self.assertTrue(plan['generate_subtitles'])
+        self.assertTrue(plan['keep_subtitles'])
+        self.assertEqual(plan['output_format'], 'mp3')
 
 
 if __name__ == '__main__':

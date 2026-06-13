@@ -175,10 +175,10 @@
       "id": "product-extras",
       "priority": "P3",
       "title": "Evaluate optional export and UX enhancements",
-      "status": "backlog",
+      "status": "partially_completed",
       "current_issue": "Useful additions exist, but they should not precede reliability fixes.",
       "implementation_notes": [
-        "Consider explicit SRT export/keep flags.",
+        "Added explicit --srt export and --keep-srt video subtitle retention flags.",
         "Consider M4B or chapter manifest export.",
         "Improve cover long-title wrapping and scaling.",
         "Include success/skipped/failed file lists in summaries."
@@ -197,14 +197,15 @@
     "result": "passed",
     "notes": [
         "compileall completed successfully.",
-        "unittest discover ran 22 tests successfully after P0, P1, and run-plan additions.",
-        "Targeted P1 utility/subtitle coverage passed without loading the TTS model.",
-        "`uv run txt2audio /private/tmp/txt2audio-plan-smoke.txt --plan-json --range all` returned a model-free plan JSON successfully."
-      ]
+            "unittest discover ran 24 tests successfully after P0, P1, run-plan, and SRT flag additions.",
+            "Targeted P1 utility/subtitle coverage passed without loading the TTS model.",
+            "`uv run txt2audio /private/tmp/txt2audio-plan-smoke.txt --plan-json --range all` returned a model-free plan JSON successfully.",
+            "`uv run txt2audio /private/tmp/txt2audio-plan-smoke.txt --plan-json --range all --srt` reported subtitle export in the plan JSON."
+        ]
   },
   "next_step": {
     "track_id": "polyphone-expansion",
     "title": "Evaluate sampled polyphone expansion",
-    "why": "Run-plan mode is implemented; remaining P2 work should only expand polyphones with representative samples and audio quality checks."
+    "why": "Explicit SRT export/retention is implemented; remaining P2 polyphone work should only proceed with representative samples and audio quality checks."
   }
 }

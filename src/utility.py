@@ -651,7 +651,8 @@ def _existing_outputs(output_path: Path) -> list[dict]:
 def _build_run_plan(args, toc, output_targets, chapter_indices, book_name, book_output_dir, source_text_path):
     audio_format = config['audio'].get('output_format', 'mp3')
     output_format = 'mp4' if args.video else audio_format
-    generate_subtitles = args.video and config['video'].get('subtitles', False)
+    keep_subtitles = getattr(args, 'srt', False) or getattr(args, 'keep_srt', False)
+    generate_subtitles = keep_subtitles or (args.video and config['video'].get('subtitles', False))
     chapters = []
     for idx in chapter_indices:
         output_path = OUTPUT_DIR / output_targets[idx]
@@ -675,6 +676,7 @@ def _build_run_plan(args, toc, output_targets, chapter_indices, book_name, book_
         "source_text_file": str(source_text_path),
         "video": args.video,
         "generate_subtitles": generate_subtitles,
+        "keep_subtitles": keep_subtitles,
         "chapters": chapters,
     }
 
@@ -806,7 +808,7 @@ def cli_main_process():
     total_clips = 0
     conversion_failures = []
     show_progress = not args.json and not args.quiet
-    generate_subtitles = args.video and config['video'].get('subtitles', False)
+    generate_subtitles = args.srt or args.keep_srt or (args.video and config['video'].get('subtitles', False))
 
     with Progress(
         SpinnerColumn(),
@@ -851,7 +853,8 @@ def cli_main_process():
                     if wav_path.is_file():
                         try:
                             transform_wav_to_video(number=idx, audio=str(wav_path), toc=toc[idx],
-                                                   resources_dir=RESOURCES_DIR)
+                                                   resources_dir=RESOURCES_DIR,
+                                                   keep_subtitles=args.keep_srt)
                         except RuntimeError as e:
                             conversion_failures.append({
                                 "chapter_index": idx,
@@ -863,7 +866,8 @@ def cli_main_process():
                     elif mp3_path.is_file():
                         try:
                             transform_wav_to_video(number=idx, audio=str(mp3_path), toc=toc[idx],
-                                                   resources_dir=RESOURCES_DIR)
+                                                   resources_dir=RESOURCES_DIR,
+                                                   keep_subtitles=args.keep_srt)
                         except RuntimeError as e:
                             conversion_failures.append({
                                 "chapter_index": idx,
@@ -939,6 +943,7 @@ def parse_arguments():
                '  txt2audio novel.txt --validate-paths --json\n'
                '  txt2audio novel.txt --plan-json\n'
                '  txt2audio novel.txt --video --range 0~8 --json\n'
+               '  txt2audio novel.txt --range all --srt\n'
                '  txt2audio novel.txt --range all --speed 0.95 --set audio.mp3_bitrate=192k\n'
                '  txt2audio --dump-config --json\n',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -949,6 +954,10 @@ def parse_arguments():
                         help='generate MP4 video with cover image (default: audio only)')
     parser.add_argument('--landscape', action='store_true',
                         help='use landscape (horizontal) video orientation (overrides config)')
+    parser.add_argument('--srt', action='store_true',
+                        help='export SRT subtitle sidecar files with audio output')
+    parser.add_argument('--keep-srt', action='store_true',
+                        help='keep generated SRT files after video subtitle burn-in')
     parser.add_argument('--range', type=str, default=None,
                         help='chapter range, e.g. "all", "8", "0~8" (skips interactive prompt)')
     parser.add_argument('--json', action='store_true',
