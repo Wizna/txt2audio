@@ -845,7 +845,7 @@ def cli_main_process():
     skipped_chapters = []
     conversion_failures = []
     chapter_results = []
-    show_progress = not args.json and not args.quiet
+    show_progress = not args.json and not args.quiet and len(chapter_indices) > 1
     generate_subtitles = args.srt or args.keep_srt or (args.video and config['video'].get('subtitles', False))
 
     with Progress(
