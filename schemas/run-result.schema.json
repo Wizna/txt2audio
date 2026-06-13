@@ -15,6 +15,7 @@
     "source_text_file",
     "elapsed_seconds",
     "generated_outputs",
+    "artifacts",
     "skipped_chapters"
   ],
   "properties": {
@@ -31,6 +32,10 @@
     "generated_outputs": {
       "type": "array",
       "items": { "type": "string" }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/artifact" }
     },
     "skipped_chapters": {
       "type": "array",
@@ -64,6 +69,19 @@
         "input_file": { "type": "string" },
         "target_file": { "type": "string" },
         "message": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "artifact": {
+      "type": "object",
+      "required": ["path", "format", "bytes", "chapter_index", "clip_index", "role"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "format": { "type": "string", "enum": ["mp3", "wav", "mp4", "srt", "json"] },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "chapter_index": { "type": ["integer", "null"], "minimum": 0 },
+        "clip_index": { "type": ["integer", "null"], "minimum": 1 },
+        "role": { "type": "string", "enum": ["audio", "video", "subtitle", "manifest"] }
       },
       "additionalProperties": true
     }

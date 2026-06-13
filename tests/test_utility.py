@@ -318,6 +318,14 @@ class UtilityTests(unittest.TestCase):
             self.assertIn('"book_name": "书名"', manifest_path.read_text(encoding='utf-8'))
 
     def test_build_chapter_manifest_records_chapter_results(self):
+        artifact = {
+            'path': '/tmp/output/书名/第一章-1.mp3',
+            'format': 'mp3',
+            'bytes': 3,
+            'chapter_index': 0,
+            'clip_index': 1,
+            'role': 'audio',
+        }
         manifest = utility._build_chapter_manifest(
             book_name='书名',
             source_text_path=Path('/tmp/source.txt'),
@@ -332,6 +340,7 @@ class UtilityTests(unittest.TestCase):
                     'clip_count': 1,
                     'existing_outputs': [],
                     'generated_outputs': ['/tmp/output/书名/第一章-1.mp3'],
+                    'artifacts': [artifact],
                     'failures': [],
                 }
             ],
@@ -341,6 +350,28 @@ class UtilityTests(unittest.TestCase):
         self.assertEqual(manifest['chapter_count'], 1)
         self.assertEqual(manifest['elapsed_seconds'], 1.2)
         self.assertEqual(manifest['chapters'][0]['status'], 'generated')
+        self.assertEqual(manifest['chapters'][0]['artifacts'], [artifact])
+
+    def test_artifact_record_reports_file_metadata(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            artifact_path = Path(temp_dir) / 'chapter-1.mp3'
+            artifact_path.write_bytes(b'mp3')
+
+            artifact = utility._artifact_record(
+                artifact_path,
+                chapter_index=2,
+                clip_index=1,
+                role='audio',
+            )
+
+        self.assertEqual(artifact, {
+            'path': str(artifact_path),
+            'format': 'mp3',
+            'bytes': 3,
+            'chapter_index': 2,
+            'clip_index': 1,
+            'role': 'audio',
+        })
 
     def test_output_policy_suppresses_non_interactive_noise(self):
         interactive = SimpleNamespace(json=False, plan_json=False, quiet=False, range=None)

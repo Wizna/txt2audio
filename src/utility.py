@@ -702,6 +702,18 @@ def _existing_outputs(output_path: Path) -> list[dict]:
     return outputs
 
 
+def _artifact_record(path, *, chapter_index, clip_index, role):
+    artifact_path = Path(path)
+    return {
+        "path": str(artifact_path),
+        "format": artifact_path.suffix.lstrip('.'),
+        "bytes": artifact_path.stat().st_size if artifact_path.is_file() else 0,
+        "chapter_index": chapter_index,
+        "clip_index": clip_index,
+        "role": role,
+    }
+
+
 def _build_run_plan(args, toc, output_targets, chapter_indices, book_name, book_output_dir, source_text_path):
     audio_format = config['audio'].get('output_format', 'mp3')
     output_format = 'mp4' if args.video else audio_format
@@ -891,6 +903,7 @@ def cli_main_process():
     chapters_skipped = 0
     total_clips = 0
     generated_outputs = []
+    artifacts = []
     skipped_chapters = []
     conversion_failures = []
     chapter_results = []
@@ -915,6 +928,7 @@ def cli_main_process():
             output_path = OUTPUT_DIR / output_targets[idx]
             output_path.parent.mkdir(parents=True, exist_ok=True)
             chapter_generated_outputs = []
+            chapter_artifacts = []
             chapter_failures = []
             chapter_existing_outputs = []
 
@@ -961,6 +975,9 @@ def cli_main_process():
                             )
                             generated_outputs.append(output_file)
                             chapter_generated_outputs.append(output_file)
+                            artifact = _artifact_record(output_file, chapter_index=idx, clip_index=i, role="video")
+                            artifacts.append(artifact)
+                            chapter_artifacts.append(artifact)
                         except RuntimeError as e:
                             failure = {
                                 "chapter_index": idx,
@@ -982,6 +999,9 @@ def cli_main_process():
                             )
                             generated_outputs.append(output_file)
                             chapter_generated_outputs.append(output_file)
+                            artifact = _artifact_record(output_file, chapter_index=idx, clip_index=i, role="video")
+                            artifacts.append(artifact)
+                            chapter_artifacts.append(artifact)
                         except RuntimeError as e:
                             failure = {
                                 "chapter_index": idx,
@@ -1003,6 +1023,9 @@ def cli_main_process():
                         output_file = convert_wav_to_mp3(wav_path, bitrate=mp3_bitrate)
                         generated_outputs.append(output_file)
                         chapter_generated_outputs.append(output_file)
+                        artifact = _artifact_record(output_file, chapter_index=idx, clip_index=i, role="audio")
+                        artifacts.append(artifact)
+                        chapter_artifacts.append(artifact)
                     except RuntimeError as e:
                         failure = {
                             "chapter_index": idx,
@@ -1018,6 +1041,9 @@ def cli_main_process():
                     output_file = str(build_clip_output_path(output_path, i, '.wav'))
                     generated_outputs.append(output_file)
                     chapter_generated_outputs.append(output_file)
+                    artifact = _artifact_record(output_file, chapter_index=idx, clip_index=i, role="audio")
+                    artifacts.append(artifact)
+                    chapter_artifacts.append(artifact)
             if args.srt:
                 for i in clip_num:
                     srt_path = build_clip_output_path(output_path, i, '.srt')
@@ -1025,6 +1051,9 @@ def cli_main_process():
                         output_file = str(srt_path)
                         generated_outputs.append(output_file)
                         chapter_generated_outputs.append(output_file)
+                        artifact = _artifact_record(output_file, chapter_index=idx, clip_index=i, role="subtitle")
+                        artifacts.append(artifact)
+                        chapter_artifacts.append(artifact)
 
             if not clip_num:
                 chapter_status = "skipped"
@@ -1041,6 +1070,7 @@ def cli_main_process():
                 "clip_count": len(clip_num),
                 "existing_outputs": chapter_existing_outputs,
                 "generated_outputs": chapter_generated_outputs,
+                "artifacts": chapter_artifacts,
                 "failures": chapter_failures,
             })
 
@@ -1062,6 +1092,8 @@ def cli_main_process():
                 chapter_results=chapter_results,
             ),
         )
+        artifact = _artifact_record(chapter_manifest_path, chapter_index=None, clip_index=None, role="manifest")
+        artifacts.append(artifact)
 
     if args.json:
         result = {
@@ -1076,6 +1108,7 @@ def cli_main_process():
             "source_text_file": str(source_text_path),
             "elapsed_seconds": round(elapsed, 1),
             "generated_outputs": generated_outputs,
+            "artifacts": artifacts,
             "skipped_chapters": skipped_chapters,
         }
         if chapter_manifest_path:

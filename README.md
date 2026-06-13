@@ -144,7 +144,18 @@ uv run txt2audio your_book.txt --range all --quiet
   "output_format": "mp3",
   "output_directory": "output/三体",
   "source_text_file": "/path/to/三体.txt2audio.txt",
-  "elapsed_seconds": 120.5
+  "elapsed_seconds": 120.5,
+  "generated_outputs": ["/path/to/output/三体/第一章-1.mp3"],
+  "artifacts": [
+    {
+      "path": "/path/to/output/三体/第一章-1.mp3",
+      "format": "mp3",
+      "bytes": 1234567,
+      "chapter_index": 0,
+      "clip_index": 1,
+      "role": "audio"
+    }
+  ]
 }
 ```
 
