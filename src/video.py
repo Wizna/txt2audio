@@ -150,6 +150,7 @@ def transform_wav_to_video(number, audio, toc, resources_dir, keep_subtitles=Fal
         # 清理已烧入视频的字幕中间文件；显式保留时不删除。
         if use_subtitles and not keep_subtitles and srt_path.is_file():
             os.remove(srt_path)
+        return str(video_path)
     else:
         if tmp_video_path.is_file():
             os.remove(tmp_video_path)

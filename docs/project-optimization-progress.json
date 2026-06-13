@@ -143,12 +143,12 @@
       "id": "polyphone-expansion",
       "priority": "P2",
       "title": "Expand polyphone annotations only with sampled audio validation",
-      "status": "planned",
+      "status": "deferred",
       "current_issue": "The docs have historically described broader polyphone support than the current conservative implementation.",
       "implementation_notes": [
-        "Add only high-value characters that are often misread and tokenized reliably.",
-        "Keep annotations sparse to preserve naturalness.",
-        "Pair each addition with focused text samples."
+        "Do not add polyphone annotations for coverage alone; CosyVoice can read many polyphones correctly without manual hints.",
+        "Only add a character after an actually observed misread sample exists and the tokenized correction is stable.",
+        "Current 校 support came from observed misreads such as 校对."
       ],
       "acceptance": [
         "Token legality is covered by tests.",
@@ -179,9 +179,10 @@
       "current_issue": "Useful additions exist, but they should not precede reliability fixes.",
       "implementation_notes": [
         "Added explicit --srt export and --keep-srt video subtitle retention flags.",
+        "JSON results now include generated_outputs, skipped_chapters, and failed_outputs for clearer run accounting.",
         "Consider M4B or chapter manifest export.",
         "Improve cover long-title wrapping and scaling.",
-        "Include success/skipped/failed file lists in summaries."
+        "Human summaries now include the count of newly generated output files."
       ],
       "acceptance": [
         "Selected enhancements are implemented only after P0 issues are resolved."
@@ -197,15 +198,15 @@
     "result": "passed",
     "notes": [
         "compileall completed successfully.",
-            "unittest discover ran 24 tests successfully after P0, P1, run-plan, and SRT flag additions.",
+            "unittest discover ran 25 tests successfully after P0, P1, run-plan, SRT flag, and output accounting additions.",
             "Targeted P1 utility/subtitle coverage passed without loading the TTS model.",
             "`uv run txt2audio /private/tmp/txt2audio-plan-smoke.txt --plan-json --range all` returned a model-free plan JSON successfully.",
             "`uv run txt2audio /private/tmp/txt2audio-plan-smoke.txt --plan-json --range all --srt` reported subtitle export in the plan JSON."
         ]
   },
-  "next_step": {
-    "track_id": "polyphone-expansion",
-    "title": "Evaluate sampled polyphone expansion",
-    "why": "Explicit SRT export/retention is implemented; remaining P2 polyphone work should only proceed with representative samples and audio quality checks."
-  }
+    "next_step": {
+        "track_id": "product-extras",
+        "title": "Improve cover long-title wrapping and scaling",
+        "why": "Output accounting is implemented; the next actionable backlog item is making generated video covers more robust for long book and chapter titles."
+    }
 }

@@ -806,6 +806,8 @@ def cli_main_process():
     chapters_generated = 0
     chapters_skipped = 0
     total_clips = 0
+    generated_outputs = []
+    skipped_chapters = []
     conversion_failures = []
     show_progress = not args.json and not args.quiet
     generate_subtitles = args.srt or args.keep_srt or (args.video and config['video'].get('subtitles', False))
@@ -839,6 +841,12 @@ def cli_main_process():
                 total_clips += len(clip_num)
             else:
                 chapters_skipped += 1
+                skipped_chapters.append({
+                    "chapter_index": idx,
+                    "display_path": toc[idx],
+                    "output_stem": str(output_path),
+                    "reason": "existing_output",
+                })
 
             if args.video:
                 from video import transform_wav_to_video
@@ -852,9 +860,13 @@ def cli_main_process():
                         continue
                     if wav_path.is_file():
                         try:
-                            transform_wav_to_video(number=idx, audio=str(wav_path), toc=toc[idx],
-                                                   resources_dir=RESOURCES_DIR,
-                                                   keep_subtitles=args.keep_srt)
+                            generated_outputs.append(transform_wav_to_video(
+                                number=idx,
+                                audio=str(wav_path),
+                                toc=toc[idx],
+                                resources_dir=RESOURCES_DIR,
+                                keep_subtitles=args.keep_srt,
+                            ))
                         except RuntimeError as e:
                             conversion_failures.append({
                                 "chapter_index": idx,
@@ -865,9 +877,13 @@ def cli_main_process():
                             })
                     elif mp3_path.is_file():
                         try:
-                            transform_wav_to_video(number=idx, audio=str(mp3_path), toc=toc[idx],
-                                                   resources_dir=RESOURCES_DIR,
-                                                   keep_subtitles=args.keep_srt)
+                            generated_outputs.append(transform_wav_to_video(
+                                number=idx,
+                                audio=str(mp3_path),
+                                toc=toc[idx],
+                                resources_dir=RESOURCES_DIR,
+                                keep_subtitles=args.keep_srt,
+                            ))
                         except RuntimeError as e:
                             conversion_failures.append({
                                 "chapter_index": idx,
@@ -884,7 +900,7 @@ def cli_main_process():
                     wav_path = build_clip_output_path(output_path, i, '.wav')
                     mp3_path = build_clip_output_path(output_path, i, '.mp3')
                     try:
-                        convert_wav_to_mp3(wav_path, bitrate=mp3_bitrate)
+                        generated_outputs.append(convert_wav_to_mp3(wav_path, bitrate=mp3_bitrate))
                     except RuntimeError as e:
                         conversion_failures.append({
                             "chapter_index": idx,
@@ -893,6 +909,14 @@ def cli_main_process():
                             "target_file": str(mp3_path),
                             "message": str(e),
                         })
+            elif audio_format == 'wav':
+                for i in clip_num:
+                    generated_outputs.append(str(build_clip_output_path(output_path, i, '.wav')))
+            if args.srt:
+                for i in clip_num:
+                    srt_path = build_clip_output_path(output_path, i, '.srt')
+                    if srt_path.is_file():
+                        generated_outputs.append(str(srt_path))
 
             progress.advance(task)
 
@@ -911,16 +935,19 @@ def cli_main_process():
             "output_directory": str(out_dir),
             "source_text_file": str(source_text_path),
             "elapsed_seconds": round(elapsed, 1),
+            "generated_outputs": generated_outputs,
+            "skipped_chapters": skipped_chapters,
         }
         if conversion_failures:
             result["error"] = "media_conversion_failed"
-            result["failures"] = conversion_failures
+            result["failed_outputs"] = conversion_failures
         print(json.dumps(result, ensure_ascii=False))
     else:
         summary = (
             f"[green]章节[/green]  {chapters_generated} 已生成, {chapters_skipped} 跳过\n"
             f"[green]片段[/green]  {total_clips}\n"
             f"[green]格式[/green]  {fmt}\n"
+            f"[green]文件[/green]  {len(generated_outputs)} 新生成\n"
             f"[green]输出[/green]  {out_dir}\n"
             f"[green]耗时[/green]  {_format_duration(elapsed)}"
         )

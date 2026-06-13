@@ -72,6 +72,24 @@ class UtilityTests(unittest.TestCase):
             self.assertTrue(wav_path.is_file())
             self.assertFalse(wav_path.with_suffix('.mp3').exists())
 
+    def test_convert_wav_to_mp3_returns_generated_path(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            wav_path = Path(temp_dir) / 'chapter-1.wav'
+            wav_path.write_bytes(b'wav')
+            mp3_path = wav_path.with_suffix('.mp3')
+            tmp_mp3_path = Path(temp_dir) / 'chapter-1.tmp.mp3'
+
+            def fake_run(command, capture_output=True):
+                tmp_mp3_path.write_bytes(b'mp3')
+                return SimpleNamespace(returncode=0, stderr=b'')
+
+            with patch.object(utility._subprocess, 'run', side_effect=fake_run):
+                result = utility.convert_wav_to_mp3(wav_path)
+
+            self.assertEqual(result, str(mp3_path))
+            self.assertFalse(wav_path.exists())
+            self.assertTrue(mp3_path.is_file())
+
     def test_transform_wav_to_video_raises_on_ffmpeg_failure(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             audio_path = Path(temp_dir) / 'chapter-1.wav'
@@ -107,12 +125,19 @@ class UtilityTests(unittest.TestCase):
             video._ffmpeg_has_subtitles_filter.cache_clear()
             with patch.object(video, 'create_image_from_text', return_value=str(image_path)):
                 with patch.object(video.subprocess, 'run', side_effect=fake_run):
-                    video.transform_wav_to_video(0, str(audio_path), '书/章', Path(temp_dir), keep_subtitles=True)
+                    result = video.transform_wav_to_video(
+                        0,
+                        str(audio_path),
+                        '书/章',
+                        Path(temp_dir),
+                        keep_subtitles=True,
+                    )
             video._ffmpeg_has_subtitles_filter.cache_clear()
 
             self.assertTrue(srt_path.is_file())
             self.assertFalse(audio_path.exists())
             self.assertTrue(audio_path.with_suffix('.mp4').is_file())
+            self.assertEqual(result, str(audio_path.with_suffix('.mp4')))
 
     def test_generate_audio_clip_can_skip_subtitle_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:
