@@ -159,12 +159,12 @@
       "id": "run-plan-json",
       "priority": "P2",
       "title": "Add an optional run-plan JSON mode",
-      "status": "planned",
+      "status": "completed",
       "current_issue": "Agents can validate paths today, but cannot inspect planned generation and resume actions without starting media generation.",
       "implementation_notes": [
-        "Keep this separate from --validate-paths.",
-        "Report selected chapters, target files, existing/skipped outputs, output format, and subtitle/video actions.",
-        "Do not load the TTS model."
+        "Added --plan-json as a model-free planning mode distinct from --validate-paths.",
+        "The plan reports selected chapters, output stems, target format, existing outputs, skip hints, video mode, and subtitle generation.",
+        "The plan path skips ffmpeg checks and does not call TTS or check_export_file_exists()."
       ],
       "acceptance": [
         "Plan mode is deterministic and model-free.",
@@ -196,14 +196,15 @@
     ],
     "result": "passed",
     "notes": [
-      "compileall completed successfully.",
-      "unittest discover ran 21 tests successfully after P0 and P1 additions.",
-      "Targeted P1 utility/subtitle coverage passed without loading the TTS model."
-    ]
+        "compileall completed successfully.",
+        "unittest discover ran 22 tests successfully after P0, P1, and run-plan additions.",
+        "Targeted P1 utility/subtitle coverage passed without loading the TTS model.",
+        "`uv run txt2audio /private/tmp/txt2audio-plan-smoke.txt --plan-json --range all` returned a model-free plan JSON successfully."
+      ]
   },
   "next_step": {
-    "track_id": "run-plan-json",
-    "title": "Add an optional run-plan JSON mode",
-    "why": "Text preprocessing ownership is now documented; the next high-value agent-facing improvement is a model-free plan mode for generation and resume decisions."
+    "track_id": "polyphone-expansion",
+    "title": "Evaluate sampled polyphone expansion",
+    "why": "Run-plan mode is implemented; remaining P2 work should only expand polyphones with representative samples and audio quality checks."
   }
 }

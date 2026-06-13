@@ -622,10 +622,61 @@ def _json_error(error_code, message):
 
 def _report_error(args, error_code, message):
     """错误输出：JSON 模式写 stdout，人类模式写 stderr rich 格式。"""
-    if args.json:
+    if args.json or getattr(args, 'plan_json', False):
         _json_error(error_code, message)
     else:
         console.print(f"[bold red]Error:[/bold red] {message}")
+
+
+def _existing_outputs(output_path: Path) -> list[dict]:
+    outputs = []
+    clip_index = 1
+    while True:
+        clip_outputs = []
+        for ext in ('.mp4', '.mp3', '.wav', '.srt'):
+            path = build_clip_output_path(output_path, clip_index, ext)
+            if path.is_file() and path.stat().st_size > 0:
+                clip_outputs.append({
+                    "format": ext.lstrip('.'),
+                    "path": str(path),
+                    "bytes": path.stat().st_size,
+                })
+        if not clip_outputs:
+            break
+        outputs.extend(clip_outputs)
+        clip_index += 1
+    return outputs
+
+
+def _build_run_plan(args, toc, output_targets, chapter_indices, book_name, book_output_dir, source_text_path):
+    audio_format = config['audio'].get('output_format', 'mp3')
+    output_format = 'mp4' if args.video else audio_format
+    generate_subtitles = args.video and config['video'].get('subtitles', False)
+    chapters = []
+    for idx in chapter_indices:
+        output_path = OUTPUT_DIR / output_targets[idx]
+        existing_outputs = _existing_outputs(output_path)
+        final_exists = any(item["format"] == output_format for item in existing_outputs)
+        chapters.append({
+            "index": idx,
+            "display_path": toc[idx],
+            "output_stem": str(output_path),
+            "target_format": output_format,
+            "will_skip_existing": final_exists,
+            "existing_outputs": existing_outputs,
+        })
+    return {
+        "status": "success",
+        "mode": "plan",
+        "book_name": book_name,
+        "chapter_count": len(chapters),
+        "output_format": output_format,
+        "output_directory": str(book_output_dir),
+        "source_text_file": str(source_text_path),
+        "video": args.video,
+        "generate_subtitles": generate_subtitles,
+        "chapters": chapters,
+    }
 
 
 def cli_main_process():
@@ -656,7 +707,7 @@ def cli_main_process():
     mp3_bitrate = config['audio'].get('mp3_bitrate', '128k')
     if args.landscape:
         config['video']['orientation'] = 'landscape'
-    if (args.video or audio_format == 'mp3') and not args.validate_paths:
+    if (args.video or audio_format == 'mp3') and not (args.validate_paths or args.plan_json):
         _check_ffmpeg()
     book_file_path = args.input_file_path
     if len(book_file_path) != 1 or '.' not in book_file_path[0]:
@@ -672,7 +723,7 @@ def cli_main_process():
         _report_error(args, "unsupported_input_format", f"不支持的输入格式: {input_path.suffix or '无后缀'}，仅支持 {supported}")
         return 1
 
-    if not args.json:
+    if not args.json and not args.plan_json:
         console.print(f"\n[bold]{book_name}[/bold]")
 
     try:
@@ -681,7 +732,7 @@ def cli_main_process():
         _report_error(args, "input_conversion_failed", str(e))
         return 1
 
-    if not args.json and input_path.suffix.lower() != '.txt':
+    if not args.json and not args.plan_json and input_path.suffix.lower() != '.txt':
         status = '已生成' if generated_txt else '复用'
         console.print(f"  [dim]{status} 文本: {source_text_path}[/dim]")
 
@@ -714,7 +765,7 @@ def cli_main_process():
         return 0
 
     # 显示目录供用户选择章节
-    if not args.json and not args.quiet and toc:
+    if not args.json and not args.plan_json and not args.quiet and toc:
         for k, v in toc.items():
             console.print(f"  [dim]{k:>5}[/dim]: {v}")
 
@@ -722,13 +773,15 @@ def cli_main_process():
     for idx in sorted(toc.keys(), reverse=True):
         output_path = OUTPUT_DIR / output_targets[idx]
         if any(build_clip_output_path(output_path, 1, ext).is_file() for ext in ('.wav', '.mp4', '.mp3')):
-            if not args.json:
+            if not args.json and not args.plan_json:
                 console.print(f"  [dim]上次生成到第 {idx} 章[/dim]")
             break
 
     try:
         if args.range is not None:
             span = parse_range_string(args.range, total=max(toc.keys()))
+        elif args.plan_json:
+            span = range(max(toc.keys()) + 1)
         else:
             span = ask_for_output_range(total=max(toc.keys()))
     except ValueError as e:
@@ -741,6 +794,11 @@ def cli_main_process():
         if idx not in toc:
             break
         chapter_indices.append(idx)
+
+    if args.plan_json:
+        plan = _build_run_plan(args, toc, output_targets, chapter_indices, book_name, book_output_dir, source_text_path)
+        print(json.dumps(plan, ensure_ascii=False))
+        return 0
 
     start_time = time.time()
     chapters_generated = 0
@@ -879,6 +937,7 @@ def parse_arguments():
                '  txt2audio novel.txt --range all\n'
                '  txt2audio novel.epub --range all\n'
                '  txt2audio novel.txt --validate-paths --json\n'
+               '  txt2audio novel.txt --plan-json\n'
                '  txt2audio novel.txt --video --range 0~8 --json\n'
                '  txt2audio novel.txt --range all --speed 0.95 --set audio.mp3_bitrate=192k\n'
                '  txt2audio --dump-config --json\n',
@@ -908,6 +967,8 @@ def parse_arguments():
                         help='print effective config as YAML (or JSON with --json) and exit')
     parser.add_argument('--validate-paths', action='store_true',
                         help='parse chapters and output paths without loading the TTS model or generating media')
+    parser.add_argument('--plan-json', action='store_true',
+                        help='output planned chapters and existing outputs as JSON without loading the TTS model')
 
     args = parser.parse_args()
 

@@ -195,6 +195,35 @@ class UtilityTests(unittest.TestCase):
         self.assertEqual(utility.annotate_polyphones('校对文本'), '[j][iào]对文本')
         self.assertNotIn('[', utility.annotate_polyphones('普通文本'))
 
+    def test_build_run_plan_reports_existing_outputs_without_mutation(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            output_stem = output_dir / '书名' / '第一章'
+            output_stem.parent.mkdir(parents=True)
+            existing_mp3 = output_stem.parent / '第一章-1.mp3'
+            existing_mp3.write_bytes(b'mp3')
+            tmp_mp3 = output_stem.parent / '第一章-1.tmp.mp3'
+            tmp_mp3.write_bytes(b'tmp')
+
+            args = SimpleNamespace(video=False)
+            with patch.object(utility, 'OUTPUT_DIR', output_dir):
+                plan = utility._build_run_plan(
+                    args,
+                    {0: '书名/第一章'},
+                    {0: Path('书名', '第一章')},
+                    [0],
+                    '书名',
+                    output_dir / '书名',
+                    Path('/tmp/source.txt'),
+                )
+
+            self.assertEqual(plan['mode'], 'plan')
+            self.assertEqual(plan['output_format'], 'mp3')
+            self.assertEqual(plan['chapter_count'], 1)
+            self.assertTrue(plan['chapters'][0]['will_skip_existing'])
+            self.assertEqual(plan['chapters'][0]['existing_outputs'][0]['path'], str(existing_mp3))
+            self.assertTrue(tmp_mp3.exists())
+
 
 if __name__ == '__main__':
     unittest.main()
