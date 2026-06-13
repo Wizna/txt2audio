@@ -127,12 +127,12 @@
       "id": "text-preprocessing-ownership",
       "priority": "P2",
       "title": "Clarify and optionally expose text preprocessing ownership",
-      "status": "planned",
+      "status": "completed",
       "current_issue": "Project-level punctuation cleanup and CosyVoice frontend normalization both affect text, but ownership is mostly implicit.",
       "implementation_notes": [
-        "Keep novel-specific cleanup in txt2audio.",
-        "Leave text normalization and split_paragraph behavior to CosyVoice unless a tested reason exists.",
-        "Either wire model_sentence_limit into behavior or keep it documented as informational."
+        "Added docs/text-processing-ownership.md to define the boundary between txt2audio cleanup and CosyVoice frontend normalization.",
+        "Documented that ttsfrd/wetext normalization and split_paragraph remain owned by CosyVoice.",
+        "Documented audio.model_sentence_limit as informational unless future tests justify wiring it into runtime behavior."
       ],
       "acceptance": [
         "No duplicate hard-to-verify normalization layer is added.",
@@ -202,8 +202,8 @@
     ]
   },
   "next_step": {
-    "track_id": "text-preprocessing-ownership",
-    "title": "Clarify text preprocessing ownership",
-    "why": "P0 and P1 reliability/test/documentation work is complete; the next planned track is making text cleanup ownership explicit without duplicating CosyVoice frontend behavior."
+    "track_id": "run-plan-json",
+    "title": "Add an optional run-plan JSON mode",
+    "why": "Text preprocessing ownership is now documented; the next high-value agent-facing improvement is a model-free plan mode for generation and resume decisions."
   }
 }
