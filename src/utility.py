@@ -35,6 +35,7 @@ sys.path.insert(0, str(PROJECT_ROOT / 'third_party' / 'CosyVoice' / 'third_party
 MODEL_DIR = config['tts']['model_dir']
 SPEAKER_WAV = config['tts']['speaker_wav']
 PROMPT_TEXT = config['tts']['prompt_text']
+PUBLIC_OUTPUT_SCHEMA_VERSION = 1
 
 MAX_CHARS_PER_CLIP = config['audio']['max_chars_per_clip']
 SPEED = config['tts'].get('speed', 1.0)
@@ -629,15 +630,23 @@ def _apply_config_overrides(args):
     MAX_CHARS_PER_CLIP = config['audio']['max_chars_per_clip']
 
 
-def _json_error(error_code, message):
+def _json_error(error_code, message, *, retryable=False, details=None):
     """输出 JSON 格式的错误信息到 stdout。"""
-    print(json.dumps({"status": "error", "error": error_code, "message": message}))
+    print(json.dumps({
+        "schema_version": PUBLIC_OUTPUT_SCHEMA_VERSION,
+        "status": "error",
+        "error_code": error_code,
+        "error": error_code,
+        "message": message,
+        "retryable": retryable,
+        "details": details or {},
+    }, ensure_ascii=False))
 
 
-def _report_error(args, error_code, message):
+def _report_error(args, error_code, message, *, retryable=False, details=None):
     """错误输出：JSON 模式写 stdout，人类模式写 stderr rich 格式。"""
     if args.json or getattr(args, 'plan_json', False):
-        _json_error(error_code, message)
+        _json_error(error_code, message, retryable=retryable, details=details)
     else:
         console.print(f"[bold red]Error:[/bold red] {message}")
 
@@ -712,6 +721,7 @@ def _build_run_plan(args, toc, output_targets, chapter_indices, book_name, book_
             "existing_outputs": existing_outputs,
         })
     return {
+        "schema_version": PUBLIC_OUTPUT_SCHEMA_VERSION,
         "status": "success",
         "mode": "plan",
         "book_name": book_name,
@@ -738,7 +748,7 @@ def _build_chapter_manifest(
     chapter_results,
 ):
     return {
-        "schema_version": 1,
+        "schema_version": PUBLIC_OUTPUT_SCHEMA_VERSION,
         "book_name": book_name,
         "source_text_file": str(source_text_path),
         "output_directory": str(book_output_dir),
@@ -815,6 +825,7 @@ def cli_main_process():
         validation_entries = build_path_validation_entries(OUTPUT_DIR, toc, output_targets)
         if args.json:
             print(json.dumps({
+                "schema_version": PUBLIC_OUTPUT_SCHEMA_VERSION,
                 "status": "success",
                 "mode": "validate_paths",
                 "book_name": book_name,
@@ -1054,6 +1065,7 @@ def cli_main_process():
 
     if args.json:
         result = {
+            "schema_version": PUBLIC_OUTPUT_SCHEMA_VERSION,
             "status": "error" if conversion_failures else "success",
             "book_name": book_name,
             "chapters_generated": chapters_generated,

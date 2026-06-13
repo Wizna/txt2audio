@@ -129,10 +129,13 @@ uv run txt2audio your_book.txt --plan-json
 uv run txt2audio your_book.txt --range all --quiet
 ```
 
+公共 JSON 输出契约见 `schemas/`，包括运行结果、计划结果、路径校验结果、章节清单和错误 envelope。
+
 退出码：`0` 成功，`1` 失败。`--json` 模式输出示例：
 
 ```json
 {
+  "schema_version": 1,
   "status": "success",
   "book_name": "三体",
   "chapters_generated": 8,

@@ -269,6 +269,7 @@ class UtilityTests(unittest.TestCase):
                 )
 
             self.assertEqual(plan['mode'], 'plan')
+            self.assertEqual(plan['schema_version'], 1)
             self.assertEqual(plan['output_format'], 'mp3')
             self.assertEqual(plan['chapter_count'], 1)
             self.assertTrue(plan['chapters'][0]['will_skip_existing'])

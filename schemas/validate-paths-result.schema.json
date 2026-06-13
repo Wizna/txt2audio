@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://txt2audio.local/schemas/validate-paths-result.schema.json",
+  "title": "txt2audio path validation result",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "status",
+    "mode",
+    "book_name",
+    "chapter_count",
+    "output_directory",
+    "source_text_file",
+    "chapters"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "status": { "type": "string", "const": "success" },
+    "mode": { "type": "string", "const": "validate_paths" },
+    "book_name": { "type": "string" },
+    "chapter_count": { "type": "integer", "minimum": 0 },
+    "output_directory": { "type": "string", "minLength": 1 },
+    "source_text_file": { "type": "string", "minLength": 1 },
+    "chapters": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/path_validation_entry" }
+    }
+  },
+  "$defs": {
+    "path_validation_entry": {
+      "type": "object",
+      "required": ["index", "display_path", "output_stem"],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "display_path": { "type": "string" },
+        "output_stem": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

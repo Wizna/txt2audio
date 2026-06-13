@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-05-31",
+  "goal": "Make txt2audio a first-class LLM agent tool with schema-bound outputs, stable errors, observable long-running execution, artifact metadata, and an MCP-ready contract.",
+  "status": "in_progress",
+  "tracks": [
+    {
+      "id": "stable-json-contracts",
+      "priority": "P0",
+      "title": "Publish schemas for public JSON outputs",
+      "status": "completed",
+      "acceptance": [
+        "schemas/error.schema.json exists.",
+        "schemas/run-result.schema.json exists.",
+        "schemas/plan-result.schema.json exists.",
+        "schemas/validate-paths-result.schema.json exists.",
+        "schemas/chapter-manifest.schema.json exists.",
+        "Tests load every schema and check required fields."
+      ]
+    },
+    {
+      "id": "stable-error-envelope",
+      "priority": "P0",
+      "title": "Use stable machine-readable error envelopes",
+      "status": "completed",
+      "acceptance": [
+        "JSON errors include schema_version, status, error_code, error, message, retryable, and details.",
+        "Existing consumers that read error still work.",
+        "Human mode still prints a concise error line."
+      ]
+    },
+    {
+      "id": "artifact-metadata",
+      "priority": "P1",
+      "title": "Return artifact metadata instead of path-only outputs",
+      "status": "pending",
+      "acceptance": [
+        "Run result and chapter manifest include artifact objects with path, format, bytes, chapter_index, clip_index, and role.",
+        "Legacy generated_outputs remains available for one transition period.",
+        "Agents do not need to scan output directories after a successful run."
+      ]
+    },
+    {
+      "id": "jsonl-events",
+      "priority": "P2",
+      "title": "Add machine-readable progress events for long runs",
+      "status": "pending",
+      "acceptance": [
+        "--events-jsonl PATH|- emits JSON Lines events.",
+        "Final --json stdout remains a single JSON object.",
+        "Events include run_started, chapter_started, artifact_created, warning, error, and run_completed."
+      ]
+    },
+    {
+      "id": "mcp-wrapper",
+      "priority": "P3",
+      "title": "Expose txt2audio through MCP tools",
+      "status": "pending",
+      "acceptance": [
+        "MCP tools reuse the same input and output schemas.",
+        "Read-only planning and validation tools are separate from side-effectful conversion.",
+        "Tool annotations document read-only, destructive, idempotent, and open-world behavior."
+      ]
+    }
+  ],
+  "completed_this_pass": [
+    "Added docs/agent-first-class-plan.md with the first-class agent roadmap.",
+    "Added schemas for error, run result, plan result, path validation result, and chapter manifest JSON outputs.",
+    "Added schema_version to run, plan, validation, manifest, and error outputs.",
+    "Expanded JSON errors with error_code, retryable, and details while preserving the legacy error field.",
+    "Added agent contract tests for schema presence and stable error envelopes.",
+    "Updated README agent integration docs to point at schemas/ and show schema_version."
+  ],
+  "next_actions": [
+    "Start P1 artifact metadata objects while keeping generated_outputs as a compatibility path list.",
+    "Add artifact object schemas shared by run results and chapter manifests.",
+    "Return or write enough artifact metadata for agents to avoid scanning output directories.",
+    "Design --events-jsonl PATH|- for long-running progress events."
+  ]
+}

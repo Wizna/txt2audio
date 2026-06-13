@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://txt2audio.local/schemas/error.schema.json",
+  "title": "txt2audio error result",
+  "type": "object",
+  "required": ["schema_version", "status", "error_code", "error", "message", "retryable", "details"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "status": { "type": "string", "const": "error" },
+    "error_code": { "type": "string", "minLength": 1 },
+    "error": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Backward-compatible alias of error_code."
+    },
+    "message": { "type": "string", "minLength": 1 },
+    "retryable": { "type": "boolean" },
+    "details": { "type": "object" }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://txt2audio.local/schemas/plan-result.schema.json",
+  "title": "txt2audio plan result",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "status",
+    "mode",
+    "book_name",
+    "chapter_count",
+    "output_format",
+    "output_directory",
+    "source_text_file",
+    "video",
+    "generate_subtitles",
+    "keep_subtitles",
+    "write_chapter_manifest",
+    "chapter_manifest_path",
+    "chapters"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "status": { "type": "string", "const": "success" },
+    "mode": { "type": "string", "const": "plan" },
+    "book_name": { "type": "string" },
+    "chapter_count": { "type": "integer", "minimum": 0 },
+    "output_format": { "type": "string", "enum": ["mp3", "wav", "mp4"] },
+    "output_directory": { "type": "string", "minLength": 1 },
+    "source_text_file": { "type": "string", "minLength": 1 },
+    "video": { "type": "boolean" },
+    "generate_subtitles": { "type": "boolean" },
+    "keep_subtitles": { "type": "boolean" },
+    "write_chapter_manifest": { "type": "boolean" },
+    "chapter_manifest_path": { "type": "string" },
+    "chapters": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/planned_chapter" }
+    }
+  },
+  "$defs": {
+    "planned_chapter": {
+      "type": "object",
+      "required": [
+        "index",
+        "display_path",
+        "output_stem",
+        "target_format",
+        "will_skip_existing",
+        "existing_outputs"
+      ],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "display_path": { "type": "string" },
+        "output_stem": { "type": "string" },
+        "target_format": { "type": "string", "enum": ["mp3", "wav", "mp4"] },
+        "will_skip_existing": { "type": "boolean" },
+        "existing_outputs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/existing_output" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "existing_output": {
+      "type": "object",
+      "required": ["format", "path", "bytes"],
+      "properties": {
+        "format": { "type": "string", "enum": ["mp3", "wav", "mp4", "srt"] },
+        "path": { "type": "string" },
+        "bytes": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

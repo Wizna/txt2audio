@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://txt2audio.local/schemas/run-result.schema.json",
+  "title": "txt2audio run result",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "status",
+    "book_name",
+    "chapters_generated",
+    "chapters_skipped",
+    "total_clips",
+    "output_format",
+    "output_directory",
+    "source_text_file",
+    "elapsed_seconds",
+    "generated_outputs",
+    "skipped_chapters"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "status": { "type": "string", "enum": ["success", "error"] },
+    "book_name": { "type": "string" },
+    "chapters_generated": { "type": "integer", "minimum": 0 },
+    "chapters_skipped": { "type": "integer", "minimum": 0 },
+    "total_clips": { "type": "integer", "minimum": 0 },
+    "output_format": { "type": "string", "enum": ["mp3", "wav", "mp4"] },
+    "output_directory": { "type": "string", "minLength": 1 },
+    "source_text_file": { "type": "string", "minLength": 1 },
+    "elapsed_seconds": { "type": "number", "minimum": 0 },
+    "generated_outputs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "skipped_chapters": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/skipped_chapter" }
+    },
+    "chapter_manifest": { "type": "string" },
+    "error": { "type": "string" },
+    "failed_outputs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/media_failure" }
+    }
+  },
+  "$defs": {
+    "skipped_chapter": {
+      "type": "object",
+      "required": ["chapter_index", "display_path", "output_stem", "reason"],
+      "properties": {
+        "chapter_index": { "type": "integer", "minimum": 0 },
+        "display_path": { "type": "string" },
+        "output_stem": { "type": "string" },
+        "reason": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "media_failure": {
+      "type": "object",
+      "required": ["chapter_index", "clip_index", "input_file", "target_file", "message"],
+      "properties": {
+        "chapter_index": { "type": "integer", "minimum": 0 },
+        "clip_index": { "type": "integer", "minimum": 1 },
+        "input_file": { "type": "string" },
+        "target_file": { "type": "string" },
+        "message": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

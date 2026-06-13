@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://txt2audio.local/schemas/chapter-manifest.schema.json",
+  "title": "txt2audio chapter manifest",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "book_name",
+    "source_text_file",
+    "output_directory",
+    "output_format",
+    "elapsed_seconds",
+    "chapter_count",
+    "chapters"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "book_name": { "type": "string" },
+    "source_text_file": { "type": "string", "minLength": 1 },
+    "output_directory": { "type": "string", "minLength": 1 },
+    "output_format": { "type": "string", "enum": ["mp3", "wav", "mp4"] },
+    "elapsed_seconds": { "type": "number", "minimum": 0 },
+    "chapter_count": { "type": "integer", "minimum": 0 },
+    "chapters": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/chapter_result" }
+    }
+  },
+  "$defs": {
+    "chapter_result": {
+      "type": "object",
+      "required": [
+        "index",
+        "display_path",
+        "output_stem",
+        "status",
+        "clip_count",
+        "existing_outputs",
+        "generated_outputs",
+        "failures"
+      ],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "display_path": { "type": "string" },
+        "output_stem": { "type": "string" },
+        "status": { "type": "string", "enum": ["generated", "skipped", "error"] },
+        "clip_count": { "type": "integer", "minimum": 0 },
+        "existing_outputs": { "type": "array" },
+        "generated_outputs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "failures": { "type": "array" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}
