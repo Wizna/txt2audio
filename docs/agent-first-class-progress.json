@@ -44,7 +44,7 @@
       "id": "jsonl-events",
       "priority": "P2",
       "title": "Add machine-readable progress events for long runs",
-      "status": "pending",
+      "status": "in_progress",
       "acceptance": [
         "--events-jsonl PATH|- emits JSON Lines events.",
         "Final --json stdout remains a single JSON object.",
@@ -72,11 +72,13 @@
     "Updated README agent integration docs to point at schemas/ and show schema_version.",
     "Added artifact object schemas shared by run results and chapter manifests.",
     "Added artifact metadata objects to run results and chapter manifests while keeping generated_outputs as a compatibility path list.",
-    "Added tests for artifact metadata construction and manifest preservation."
+    "Added tests for artifact metadata construction and manifest preservation.",
+    "Added --events-jsonl PATH|- for JSON Lines progress events that do not pollute final stdout JSON.",
+    "Added schemas/event.schema.json and tests for stable event records."
   ],
   "next_actions": [
-    "Design --events-jsonl PATH|- for long-running progress events.",
-    "Add event schemas for run_started, chapter_started, artifact_created, error, and run_completed.",
-    "Keep final --json stdout as a single JSON object while routing events to JSON Lines."
+    "Wire warning events into dependency degradation paths such as subtitle burn-in fallback.",
+    "Add an end-to-end smoke test for --events-jsonl with a model-free/faked generation path.",
+    "Start P3 MCP wrapper design after event coverage is complete."
   ]
 }

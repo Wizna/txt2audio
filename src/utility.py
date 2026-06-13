@@ -714,6 +714,36 @@ def _artifact_record(path, *, chapter_index, clip_index, role):
     }
 
 
+class _JsonlEventWriter:
+    def __init__(self, stream, *, close_stream):
+        self._stream = stream
+        self._close_stream = close_stream
+
+    def emit(self, event, **payload):
+        record = {
+            "schema_version": PUBLIC_OUTPUT_SCHEMA_VERSION,
+            "event": event,
+            "time": round(time.time(), 3),
+            "payload": payload,
+        }
+        print(json.dumps(record, ensure_ascii=False), file=self._stream, flush=True)
+
+    def close(self):
+        if self._close_stream:
+            self._stream.close()
+
+
+def _open_event_writer(events_jsonl):
+    if not events_jsonl:
+        return None
+    if events_jsonl == '-':
+        return _JsonlEventWriter(sys.stderr, close_stream=False)
+
+    event_path = Path(events_jsonl)
+    event_path.parent.mkdir(parents=True, exist_ok=True)
+    return _JsonlEventWriter(open(event_path, 'a', encoding='utf-8'), close_stream=True)
+
+
 def _build_run_plan(args, toc, output_targets, chapter_indices, book_name, book_output_dir, source_text_path):
     audio_format = config['audio'].get('output_format', 'mp3')
     output_format = 'mp4' if args.video else audio_format
@@ -898,6 +928,7 @@ def cli_main_process():
             _report_error(args, "ffmpeg_not_found", str(e))
             return 1
 
+    event_writer = _open_event_writer(args.events_jsonl)
     start_time = time.time()
     chapters_generated = 0
     chapters_skipped = 0
@@ -910,231 +941,292 @@ def cli_main_process():
     show_progress = _should_show_chapter_progress(args, chapter_indices)
     generate_subtitles = args.srt or args.keep_srt or (args.video and config['video'].get('subtitles', False))
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        MofNCompleteColumn(),
-        TimeRemainingColumn(),
-        console=console,
-        disable=not show_progress,
-    ) as progress:
-        task = progress.add_task("准备中...", total=len(chapter_indices))
+    try:
+        if event_writer:
+            event_writer.emit(
+                "run_started",
+                book_name=book_name,
+                chapter_count=len(chapter_indices),
+                output_format='mp4' if args.video else audio_format,
+                output_directory=str(book_output_dir),
+                source_text_file=str(source_text_path),
+            )
 
-        for idx in chapter_indices:
-            chapter_title = toc[idx].split('/')[-1]
-            progress.update(task, description=f"[cyan]{chapter_title}[/cyan]")
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            MofNCompleteColumn(),
+            TimeRemainingColumn(),
+            console=console,
+            disable=not show_progress,
+        ) as progress:
+            task = progress.add_task("准备中...", total=len(chapter_indices))
 
-            output_path = OUTPUT_DIR / output_targets[idx]
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            chapter_generated_outputs = []
-            chapter_artifacts = []
-            chapter_failures = []
-            chapter_existing_outputs = []
+            for idx in chapter_indices:
+                chapter_title = toc[idx].split('/')[-1]
+                progress.update(task, description=f"[cyan]{chapter_title}[/cyan]")
 
-            try:
-                clip_num = generate_audio_clip(
-                    text=''.join(contents[idx]),
-                    output_path=str(output_path),
-                    generate_subtitles=generate_subtitles,
-                )
-            except RuntimeError as e:
-                _report_error(args, "tts_generation_failed", str(e))
-                return 1
+                output_path = OUTPUT_DIR / output_targets[idx]
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                chapter_generated_outputs = []
+                chapter_artifacts = []
+                chapter_failures = []
+                chapter_existing_outputs = []
+                if event_writer:
+                    event_writer.emit(
+                        "chapter_started",
+                        chapter_index=idx,
+                        display_path=toc[idx],
+                        output_stem=str(output_path),
+                    )
 
-            if clip_num:
-                chapters_generated += 1
-                total_clips += len(clip_num)
-            else:
-                chapters_skipped += 1
-                skipped_chapters.append({
-                    "chapter_index": idx,
-                    "display_path": toc[idx],
-                    "output_stem": str(output_path),
-                    "reason": "existing_output",
-                })
+                try:
+                    clip_num = generate_audio_clip(
+                        text=''.join(contents[idx]),
+                        output_path=str(output_path),
+                        generate_subtitles=generate_subtitles,
+                    )
+                except RuntimeError as e:
+                    if event_writer:
+                        event_writer.emit(
+                            "error",
+                            error_code="tts_generation_failed",
+                            message=str(e),
+                            chapter_index=idx,
+                        )
+                    _report_error(args, "tts_generation_failed", str(e))
+                    return 1
 
-            if args.video:
-                from video import transform_wav_to_video
-                i = 1
-                while True:
-                    mp4_path = build_clip_output_path(output_path, i, '.mp4')
-                    wav_path = build_clip_output_path(output_path, i, '.wav')
-                    mp3_path = build_clip_output_path(output_path, i, '.mp3')
-                    if mp4_path.is_file():
+                if clip_num:
+                    chapters_generated += 1
+                    total_clips += len(clip_num)
+                else:
+                    chapters_skipped += 1
+                    skipped_chapters.append({
+                        "chapter_index": idx,
+                        "display_path": toc[idx],
+                        "output_stem": str(output_path),
+                        "reason": "existing_output",
+                    })
+
+                if args.video:
+                    from video import transform_wav_to_video
+                    i = 1
+                    while True:
+                        mp4_path = build_clip_output_path(output_path, i, '.mp4')
+                        wav_path = build_clip_output_path(output_path, i, '.wav')
+                        mp3_path = build_clip_output_path(output_path, i, '.mp3')
+                        if mp4_path.is_file():
+                            i += 1
+                            continue
+                        if wav_path.is_file():
+                            try:
+                                output_file = transform_wav_to_video(
+                                    number=idx,
+                                    audio=str(wav_path),
+                                    toc=toc[idx],
+                                    resources_dir=RESOURCES_DIR,
+                                    keep_subtitles=args.keep_srt,
+                                )
+                                generated_outputs.append(output_file)
+                                chapter_generated_outputs.append(output_file)
+                                artifact = _artifact_record(output_file, chapter_index=idx, clip_index=i, role="video")
+                                artifacts.append(artifact)
+                                chapter_artifacts.append(artifact)
+                                if event_writer:
+                                    event_writer.emit("artifact_created", artifact=artifact)
+                            except RuntimeError as e:
+                                failure = {
+                                    "chapter_index": idx,
+                                    "clip_index": i,
+                                    "input_file": str(wav_path),
+                                    "target_file": str(mp4_path),
+                                    "message": str(e),
+                                }
+                                conversion_failures.append(failure)
+                                chapter_failures.append(failure)
+                                if event_writer:
+                                    event_writer.emit("error", error_code="media_conversion_failed", **failure)
+                        elif mp3_path.is_file():
+                            try:
+                                output_file = transform_wav_to_video(
+                                    number=idx,
+                                    audio=str(mp3_path),
+                                    toc=toc[idx],
+                                    resources_dir=RESOURCES_DIR,
+                                    keep_subtitles=args.keep_srt,
+                                )
+                                generated_outputs.append(output_file)
+                                chapter_generated_outputs.append(output_file)
+                                artifact = _artifact_record(output_file, chapter_index=idx, clip_index=i, role="video")
+                                artifacts.append(artifact)
+                                chapter_artifacts.append(artifact)
+                                if event_writer:
+                                    event_writer.emit("artifact_created", artifact=artifact)
+                            except RuntimeError as e:
+                                failure = {
+                                    "chapter_index": idx,
+                                    "clip_index": i,
+                                    "input_file": str(mp3_path),
+                                    "target_file": str(mp4_path),
+                                    "message": str(e),
+                                }
+                                conversion_failures.append(failure)
+                                chapter_failures.append(failure)
+                                if event_writer:
+                                    event_writer.emit("error", error_code="media_conversion_failed", **failure)
+                        else:
+                            break
                         i += 1
-                        continue
-                    if wav_path.is_file():
+                elif audio_format == 'mp3':
+                    for i in clip_num:
+                        wav_path = build_clip_output_path(output_path, i, '.wav')
+                        mp3_path = build_clip_output_path(output_path, i, '.mp3')
                         try:
-                            output_file = transform_wav_to_video(
-                                number=idx,
-                                audio=str(wav_path),
-                                toc=toc[idx],
-                                resources_dir=RESOURCES_DIR,
-                                keep_subtitles=args.keep_srt,
-                            )
+                            output_file = convert_wav_to_mp3(wav_path, bitrate=mp3_bitrate)
                             generated_outputs.append(output_file)
                             chapter_generated_outputs.append(output_file)
-                            artifact = _artifact_record(output_file, chapter_index=idx, clip_index=i, role="video")
+                            artifact = _artifact_record(output_file, chapter_index=idx, clip_index=i, role="audio")
                             artifacts.append(artifact)
                             chapter_artifacts.append(artifact)
+                            if event_writer:
+                                event_writer.emit("artifact_created", artifact=artifact)
                         except RuntimeError as e:
                             failure = {
                                 "chapter_index": idx,
                                 "clip_index": i,
                                 "input_file": str(wav_path),
-                                "target_file": str(mp4_path),
+                                "target_file": str(mp3_path),
                                 "message": str(e),
                             }
                             conversion_failures.append(failure)
                             chapter_failures.append(failure)
-                    elif mp3_path.is_file():
-                        try:
-                            output_file = transform_wav_to_video(
-                                number=idx,
-                                audio=str(mp3_path),
-                                toc=toc[idx],
-                                resources_dir=RESOURCES_DIR,
-                                keep_subtitles=args.keep_srt,
-                            )
-                            generated_outputs.append(output_file)
-                            chapter_generated_outputs.append(output_file)
-                            artifact = _artifact_record(output_file, chapter_index=idx, clip_index=i, role="video")
-                            artifacts.append(artifact)
-                            chapter_artifacts.append(artifact)
-                        except RuntimeError as e:
-                            failure = {
-                                "chapter_index": idx,
-                                "clip_index": i,
-                                "input_file": str(mp3_path),
-                                "target_file": str(mp4_path),
-                                "message": str(e),
-                            }
-                            conversion_failures.append(failure)
-                            chapter_failures.append(failure)
-                    else:
-                        break
-                    i += 1
-            elif audio_format == 'mp3':
-                for i in clip_num:
-                    wav_path = build_clip_output_path(output_path, i, '.wav')
-                    mp3_path = build_clip_output_path(output_path, i, '.mp3')
-                    try:
-                        output_file = convert_wav_to_mp3(wav_path, bitrate=mp3_bitrate)
+                            if event_writer:
+                                event_writer.emit("error", error_code="media_conversion_failed", **failure)
+                elif audio_format == 'wav':
+                    for i in clip_num:
+                        output_file = str(build_clip_output_path(output_path, i, '.wav'))
                         generated_outputs.append(output_file)
                         chapter_generated_outputs.append(output_file)
                         artifact = _artifact_record(output_file, chapter_index=idx, clip_index=i, role="audio")
                         artifacts.append(artifact)
                         chapter_artifacts.append(artifact)
-                    except RuntimeError as e:
-                        failure = {
-                            "chapter_index": idx,
-                            "clip_index": i,
-                            "input_file": str(wav_path),
-                            "target_file": str(mp3_path),
-                            "message": str(e),
-                        }
-                        conversion_failures.append(failure)
-                        chapter_failures.append(failure)
-            elif audio_format == 'wav':
-                for i in clip_num:
-                    output_file = str(build_clip_output_path(output_path, i, '.wav'))
-                    generated_outputs.append(output_file)
-                    chapter_generated_outputs.append(output_file)
-                    artifact = _artifact_record(output_file, chapter_index=idx, clip_index=i, role="audio")
-                    artifacts.append(artifact)
-                    chapter_artifacts.append(artifact)
-            if args.srt:
-                for i in clip_num:
-                    srt_path = build_clip_output_path(output_path, i, '.srt')
-                    if srt_path.is_file():
-                        output_file = str(srt_path)
-                        generated_outputs.append(output_file)
-                        chapter_generated_outputs.append(output_file)
-                        artifact = _artifact_record(output_file, chapter_index=idx, clip_index=i, role="subtitle")
-                        artifacts.append(artifact)
-                        chapter_artifacts.append(artifact)
+                        if event_writer:
+                            event_writer.emit("artifact_created", artifact=artifact)
+                if args.srt:
+                    for i in clip_num:
+                        srt_path = build_clip_output_path(output_path, i, '.srt')
+                        if srt_path.is_file():
+                            output_file = str(srt_path)
+                            generated_outputs.append(output_file)
+                            chapter_generated_outputs.append(output_file)
+                            artifact = _artifact_record(output_file, chapter_index=idx, clip_index=i, role="subtitle")
+                            artifacts.append(artifact)
+                            chapter_artifacts.append(artifact)
+                            if event_writer:
+                                event_writer.emit("artifact_created", artifact=artifact)
 
-            if not clip_num:
-                chapter_status = "skipped"
-                chapter_existing_outputs = _existing_outputs(output_path)
-            elif chapter_failures:
-                chapter_status = "error"
+                if not clip_num:
+                    chapter_status = "skipped"
+                    chapter_existing_outputs = _existing_outputs(output_path)
+                elif chapter_failures:
+                    chapter_status = "error"
+                else:
+                    chapter_status = "generated"
+                chapter_result = {
+                    "index": idx,
+                    "display_path": toc[idx],
+                    "output_stem": str(output_path),
+                    "status": chapter_status,
+                    "clip_count": len(clip_num),
+                    "existing_outputs": chapter_existing_outputs,
+                    "generated_outputs": chapter_generated_outputs,
+                    "artifacts": chapter_artifacts,
+                    "failures": chapter_failures,
+                }
+                chapter_results.append(chapter_result)
+                if event_writer:
+                    event_writer.emit("chapter_completed", **chapter_result)
+
+                progress.advance(task)
+
+        elapsed = time.time() - start_time
+        fmt = 'mp4' if args.video else audio_format
+        out_dir = book_output_dir
+        chapter_manifest_path = None
+        if args.chapter_manifest:
+            chapter_manifest_path = save_chapter_manifest(
+                out_dir / CHAPTER_MANIFEST_FILE_NAME,
+                _build_chapter_manifest(
+                    book_name=book_name,
+                    source_text_path=source_text_path,
+                    book_output_dir=out_dir,
+                    output_format=fmt,
+                    elapsed=elapsed,
+                    chapter_results=chapter_results,
+                ),
+            )
+            artifact = _artifact_record(chapter_manifest_path, chapter_index=None, clip_index=None, role="manifest")
+            artifacts.append(artifact)
+            if event_writer:
+                event_writer.emit("artifact_created", artifact=artifact)
+
+        status = "error" if conversion_failures else "success"
+        if event_writer:
+            event_writer.emit(
+                "run_completed",
+                status=status,
+                chapters_generated=chapters_generated,
+                chapters_skipped=chapters_skipped,
+                total_clips=total_clips,
+                artifact_count=len(artifacts),
+                elapsed_seconds=round(elapsed, 1),
+            )
+
+        if args.json:
+            result = {
+                "schema_version": PUBLIC_OUTPUT_SCHEMA_VERSION,
+                "status": status,
+                "book_name": book_name,
+                "chapters_generated": chapters_generated,
+                "chapters_skipped": chapters_skipped,
+                "total_clips": total_clips,
+                "output_format": fmt,
+                "output_directory": str(out_dir),
+                "source_text_file": str(source_text_path),
+                "elapsed_seconds": round(elapsed, 1),
+                "generated_outputs": generated_outputs,
+                "artifacts": artifacts,
+                "skipped_chapters": skipped_chapters,
+            }
+            if chapter_manifest_path:
+                result["chapter_manifest"] = chapter_manifest_path
+            if conversion_failures:
+                result["error"] = "media_conversion_failed"
+                result["failed_outputs"] = conversion_failures
+            print(json.dumps(result, ensure_ascii=False))
+        elif _should_print_summary(args, conversion_failures):
+            summary = (
+                f"[green]章节[/green]  {chapters_generated} 已生成, {chapters_skipped} 跳过\n"
+                f"[green]片段[/green]  {total_clips}\n"
+                f"[green]格式[/green]  {fmt}\n"
+                f"[green]文件[/green]  {len(generated_outputs)} 新生成\n"
+                f"[green]输出[/green]  {out_dir}\n"
+                f"[green]耗时[/green]  {_format_duration(elapsed)}"
+            )
+            if chapter_manifest_path:
+                summary += f"\n[green]清单[/green]  {chapter_manifest_path}"
+            if conversion_failures:
+                failed_paths = '\n'.join(f"  {item['target_file']}: {item['message']}" for item in conversion_failures)
+                summary += f"\n[red]转换失败[/red]  {len(conversion_failures)}\n{failed_paths}"
+                console.print(Panel(summary, title="[bold red]部分失败[/bold red]", border_style="red"))
             else:
-                chapter_status = "generated"
-            chapter_results.append({
-                "index": idx,
-                "display_path": toc[idx],
-                "output_stem": str(output_path),
-                "status": chapter_status,
-                "clip_count": len(clip_num),
-                "existing_outputs": chapter_existing_outputs,
-                "generated_outputs": chapter_generated_outputs,
-                "artifacts": chapter_artifacts,
-                "failures": chapter_failures,
-            })
-
-            progress.advance(task)
-
-    elapsed = time.time() - start_time
-    fmt = 'mp4' if args.video else audio_format
-    out_dir = book_output_dir
-    chapter_manifest_path = None
-    if args.chapter_manifest:
-        chapter_manifest_path = save_chapter_manifest(
-            out_dir / CHAPTER_MANIFEST_FILE_NAME,
-            _build_chapter_manifest(
-                book_name=book_name,
-                source_text_path=source_text_path,
-                book_output_dir=out_dir,
-                output_format=fmt,
-                elapsed=elapsed,
-                chapter_results=chapter_results,
-            ),
-        )
-        artifact = _artifact_record(chapter_manifest_path, chapter_index=None, clip_index=None, role="manifest")
-        artifacts.append(artifact)
-
-    if args.json:
-        result = {
-            "schema_version": PUBLIC_OUTPUT_SCHEMA_VERSION,
-            "status": "error" if conversion_failures else "success",
-            "book_name": book_name,
-            "chapters_generated": chapters_generated,
-            "chapters_skipped": chapters_skipped,
-            "total_clips": total_clips,
-            "output_format": fmt,
-            "output_directory": str(out_dir),
-            "source_text_file": str(source_text_path),
-            "elapsed_seconds": round(elapsed, 1),
-            "generated_outputs": generated_outputs,
-            "artifacts": artifacts,
-            "skipped_chapters": skipped_chapters,
-        }
-        if chapter_manifest_path:
-            result["chapter_manifest"] = chapter_manifest_path
-        if conversion_failures:
-            result["error"] = "media_conversion_failed"
-            result["failed_outputs"] = conversion_failures
-        print(json.dumps(result, ensure_ascii=False))
-    elif _should_print_summary(args, conversion_failures):
-        summary = (
-            f"[green]章节[/green]  {chapters_generated} 已生成, {chapters_skipped} 跳过\n"
-            f"[green]片段[/green]  {total_clips}\n"
-            f"[green]格式[/green]  {fmt}\n"
-            f"[green]文件[/green]  {len(generated_outputs)} 新生成\n"
-            f"[green]输出[/green]  {out_dir}\n"
-            f"[green]耗时[/green]  {_format_duration(elapsed)}"
-        )
-        if chapter_manifest_path:
-            summary += f"\n[green]清单[/green]  {chapter_manifest_path}"
-        if conversion_failures:
-            failed_paths = '\n'.join(f"  {item['target_file']}: {item['message']}" for item in conversion_failures)
-            summary += f"\n[red]转换失败[/red]  {len(conversion_failures)}\n{failed_paths}"
-            console.print(Panel(summary, title="[bold red]部分失败[/bold red]", border_style="red"))
-        else:
-            console.print(Panel(summary, title="[bold green]完成[/bold green]", border_style="green"))
-    return 1 if conversion_failures else 0
+                console.print(Panel(summary, title="[bold green]完成[/bold green]", border_style="green"))
+        return 1 if conversion_failures else 0
+    finally:
+        if event_writer:
+            event_writer.close()
 
 
 def parse_arguments():
@@ -1147,6 +1239,7 @@ def parse_arguments():
                '  txt2audio novel.txt --validate-paths --json\n'
                '  txt2audio novel.txt --plan-json\n'
                '  txt2audio novel.txt --range all --chapter-manifest\n'
+               '  txt2audio novel.txt --range all --json --events-jsonl events.jsonl\n'
                '  txt2audio novel.txt --video --range 0~8 --json\n'
                '  txt2audio novel.txt --range all --srt\n'
                '  txt2audio novel.txt --range all --speed 0.95 --set audio.mp3_bitrate=192k\n'
@@ -1185,6 +1278,8 @@ def parse_arguments():
                         help='output planned chapters and existing outputs as JSON without loading the TTS model')
     parser.add_argument('--chapter-manifest', action='store_true',
                         help='write output chapter_manifest.json after a generation run')
+    parser.add_argument('--events-jsonl', type=str, default=None,
+                        help='write machine-readable progress events to a JSONL file, or "-" for stderr')
 
     args = parser.parse_args()
 

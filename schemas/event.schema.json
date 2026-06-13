@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://txt2audio.local/schemas/event.schema.json",
+  "title": "txt2audio JSONL event",
+  "type": "object",
+  "required": ["schema_version", "event", "time", "payload"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "event": {
+      "type": "string",
+      "enum": [
+        "run_started",
+        "chapter_started",
+        "artifact_created",
+        "chapter_completed",
+        "warning",
+        "error",
+        "run_completed"
+      ]
+    },
+    "time": { "type": "number" },
+    "payload": { "type": "object" }
+  },
+  "additionalProperties": true
+}

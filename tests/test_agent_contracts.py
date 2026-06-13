@@ -17,6 +17,7 @@ class AgentContractTests(unittest.TestCase):
         schema_dir = PROJECT_ROOT / 'schemas'
         expected = {
             'error.schema.json',
+            'event.schema.json',
             'run-result.schema.json',
             'plan-result.schema.json',
             'validate-paths-result.schema.json',

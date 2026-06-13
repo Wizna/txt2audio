@@ -1,5 +1,7 @@
 import tempfile
 import unittest
+import io
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -372,6 +374,18 @@ class UtilityTests(unittest.TestCase):
             'clip_index': 1,
             'role': 'audio',
         })
+
+    def test_jsonl_event_writer_emits_stable_event_records(self):
+        stream = io.StringIO()
+        writer = utility._JsonlEventWriter(stream, close_stream=False)
+
+        writer.emit('run_started', book_name='书名')
+
+        event = json.loads(stream.getvalue())
+        self.assertEqual(event['schema_version'], 1)
+        self.assertEqual(event['event'], 'run_started')
+        self.assertIsInstance(event['time'], float)
+        self.assertEqual(event['payload'], {'book_name': '书名'})
 
     def test_output_policy_suppresses_non_interactive_noise(self):
         interactive = SimpleNamespace(json=False, plan_json=False, quiet=False, range=None)

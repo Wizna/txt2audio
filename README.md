@@ -125,11 +125,14 @@ uv run txt2audio your_book.txt --validate-paths --json
 # 输出生成计划和已存在文件，不加载模型也不生成媒体
 uv run txt2audio your_book.txt --plan-json
 
+# 长任务事件流（JSON Lines；不会污染最终 stdout JSON）
+uv run txt2audio your_book.txt --range all --json --events-jsonl events.jsonl
+
 # 静默模式（仅输出错误）
 uv run txt2audio your_book.txt --range all --quiet
 ```
 
-公共 JSON 输出契约见 `schemas/`，包括运行结果、计划结果、路径校验结果、章节清单和错误 envelope。
+公共 JSON 输出契约见 `schemas/`，包括运行结果、计划结果、路径校验结果、章节清单、JSONL 事件和错误 envelope。`--events-jsonl -` 会把事件写到 stderr，适合需要实时读取进度但仍要求 stdout 只保留最终 JSON 的 agent。
 
 退出码：`0` 成功，`1` 失败。`--json` 模式输出示例：
 
