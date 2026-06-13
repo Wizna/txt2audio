@@ -177,7 +177,7 @@ def transform_wav_to_video(number, audio, toc, resources_dir, keep_subtitles=Fal
         '-pix_fmt', vc['ffmpeg_pixel_format'],
     ]
     if use_subtitles:
-        subtitle_style = vc.get('subtitle_style', 'FontSize=16,PrimaryColour=&Hffffff,Alignment=2,MarginV=95')
+        subtitle_style = vc.get('subtitle_style', 'FontSize=20,PrimaryColour=&Hffffff,Alignment=2,MarginV=90')
         command += ['-vf', build_subtitles_filter(srt_path, subtitle_style)]
     command += ['-shortest', '-movflags', '+faststart', str(tmp_video_path)]
 
