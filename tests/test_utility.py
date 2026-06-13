@@ -157,6 +157,36 @@ class UtilityTests(unittest.TestCase):
         self.assertEqual(toc[0], '书:名?/第一章')
         self.assertEqual(output_targets[0], Path('书_名_', '第一章'))
 
+    def test_construct_text_and_name_preserves_current_special_sections(self):
+        raw_data = '\n'.join([
+            '序章',
+            '序章内容。',
+            '第一卷',
+            '第一章',
+            '正文。',
+            '楔子',
+            '楔子内容。',
+            '第二章',
+            '第二章内容。',
+            '终章',
+            '终章内容。',
+        ])
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            with patch.object(utility, 'OUTPUT_DIR', output_dir):
+                toc, output_targets, contents = utility.construct_text_and_name(raw_data, '书名')
+
+        self.assertEqual(toc, {
+            0: '书名/序章',
+            1: '书名/第一卷/第一章',
+            2: '书名/第一卷/第一章/楔子',
+            3: '书名/第一卷/第二章',
+            4: '书名/第一卷/第二章/终章',
+        })
+        self.assertEqual(output_targets[2], Path('书名/第一卷/第一章/楔子'))
+        self.assertEqual(contents[4], ['终章内容。'])
+
     def test_mask_punctuations_removes_urls_and_normalizes_sentence_end(self):
         self.assertEqual(utility.mask_punctuations('他说——你好 https://example.com'), '他说，你好。')
         self.assertEqual(utility.mask_punctuations('※※※'), '')

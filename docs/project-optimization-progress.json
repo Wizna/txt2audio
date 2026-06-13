@@ -78,13 +78,13 @@
       "id": "chapter-parser-baseline-tests",
       "priority": "P1",
       "title": "Add regression tests before changing chapter recognition",
-      "status": "partially_completed",
+      "status": "completed",
       "current_issue": "Chapter parsing is behaviorally important and sensitive to regex changes, but construct_text_and_name() has no direct test coverage.",
       "implementation_notes": [
         "Added baseline tests for current Chinese numeral volume/chapter parsing.",
         "Added coverage for intro fallback and duplicate heading behavior.",
         "Added coverage for display/output path separation.",
-        "More special-section fixtures can still be added before any parser expansion."
+        "Added coverage for current special-section behavior for 序章, 楔子, and 终章."
       ],
       "acceptance": [
         "Baseline tests pass without changing parser behavior.",
@@ -197,13 +197,13 @@
     "result": "passed",
     "notes": [
       "compileall completed successfully.",
-      "unittest discover ran 20 tests successfully after P0 and P1 additions.",
+      "unittest discover ran 21 tests successfully after P0 and P1 additions.",
       "Targeted P1 utility/subtitle coverage passed without loading the TTS model."
     ]
   },
   "next_step": {
-    "track_id": "chapter-parser-baseline-tests",
-    "title": "Add remaining special-section fixtures before parser enhancements",
-    "why": "The main P0 fixes and core helper coverage are complete; chapter parser behavior should get a few more fixtures before any recognition rules are broadened."
+    "track_id": "text-preprocessing-ownership",
+    "title": "Clarify text preprocessing ownership",
+    "why": "P0 and P1 reliability/test/documentation work is complete; the next planned track is making text cleanup ownership explicit without duplicating CosyVoice frontend behavior."
   }
 }
