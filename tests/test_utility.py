@@ -141,6 +141,49 @@ class UtilityTests(unittest.TestCase):
             self.assertTrue(audio_path.with_suffix('.mp4').is_file())
             self.assertEqual(result, str(audio_path.with_suffix('.mp4')))
 
+    def test_transform_wav_to_video_records_subtitle_filter_warning(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            audio_path = Path(temp_dir) / 'chapter-1.wav'
+            audio_path.write_bytes(b'wav')
+            audio_path.with_suffix('.srt').write_text(
+                '1\n00:00:00,000 --> 00:00:01,000\n你好\n',
+                encoding='utf-8',
+            )
+            image_path = Path(temp_dir) / 'cover.jpg'
+            image_path.write_bytes(b'jpg')
+            tmp_mp4 = Path(temp_dir) / 'chapter-1.tmp.mp4'
+            warnings = []
+            original_subtitles = video.config['video'].get('subtitles')
+
+            def fake_run(command, capture_output=True, text=False, timeout=None):
+                if '-filters' in command:
+                    return SimpleNamespace(returncode=0, stdout='', stderr=b'')
+                self.assertNotIn('-vf', command)
+                tmp_mp4.write_bytes(b'mp4')
+                return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
+
+            video.config['video']['subtitles'] = True
+            video._ffmpeg_has_subtitles_filter.cache_clear()
+            video._warned_missing_subtitles_filter = False
+            try:
+                with patch.object(video, 'create_image_from_text', return_value=str(image_path)):
+                    with patch.object(video.subprocess, 'run', side_effect=fake_run):
+                        with patch.object(video.logger, 'warning'):
+                            video.transform_wav_to_video(
+                                0,
+                                str(audio_path),
+                                '书/章',
+                                Path(temp_dir),
+                                warnings=warnings,
+                            )
+            finally:
+                video.config['video']['subtitles'] = original_subtitles
+                video._ffmpeg_has_subtitles_filter.cache_clear()
+                video._warned_missing_subtitles_filter = False
+
+            self.assertEqual(warnings[0]['warning_code'], 'subtitle_burn_in_skipped')
+            self.assertEqual(warnings[0]['subtitle_file'], str(audio_path.with_suffix('.srt')))
+
     def test_generate_audio_clip_can_skip_subtitle_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             output_stem = Path(temp_dir) / 'chapter'

@@ -42,6 +42,7 @@ dependencies = [
 ]
 [project.scripts]
 txt2audio = "transform_to_audio:main"
+txt2audio-mcp = "txt2audio_mcp:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

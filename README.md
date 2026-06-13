@@ -162,6 +162,28 @@ uv run txt2audio your_book.txt --range all --quiet
 }
 ```
 
+#### MCP 集成
+
+本项目提供 `txt2audio-mcp` 作为 stdio MCP server，复用同一套 `schemas/` 契约和 CLI 行为。MCP 工具面按副作用拆分：
+
+- `txt2audio_validate_book`：只读，解析章节并校验输出路径
+- `txt2audio_plan_conversion`：只读，返回生成计划和已存在产物
+- `txt2audio_convert_book`：会写入输出目录，支持断点续生成
+- `txt2audio_get_manifest`：只读，读取 `chapter_manifest.json`
+
+MCP 客户端配置示例：
+
+```json
+{
+  "mcpServers": {
+    "txt2audio": {
+      "command": "uv",
+      "args": ["run", "txt2audio-mcp"]
+    }
+  }
+}
+```
+
 ## 输出结构
 
 ```

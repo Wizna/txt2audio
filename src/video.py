@@ -139,7 +139,7 @@ def _ffmpeg_has_subtitles_filter():
         return False
 
 
-def transform_wav_to_video(number, audio, toc, resources_dir, keep_subtitles=False):
+def transform_wav_to_video(number, audio, toc, resources_dir, keep_subtitles=False, warnings=None):
     """wav + 封面图 -> mp4，成功后删除原 wav。使用临时文件确保原子写入。
     当 config.video.subtitles 为 true 且存在对应 SRT 文件时，烧入字幕。"""
     image = create_image_from_text(number=number, toc=toc, audio=audio, resources_dir=resources_dir)
@@ -151,9 +151,17 @@ def transform_wav_to_video(number, audio, toc, resources_dir, keep_subtitles=Fal
     srt_path = audio_path.with_suffix('.srt')
     use_subtitles = vc.get('subtitles', False) and srt_path.is_file()
     if use_subtitles and not _ffmpeg_has_subtitles_filter():
+        warning = {
+            "warning_code": "subtitle_burn_in_skipped",
+            "message": "当前 ffmpeg 缺少 subtitles 滤镜，本次运行将跳过字幕烧录。",
+            "audio_file": str(audio_path),
+            "subtitle_file": str(srt_path),
+        }
+        if warnings is not None:
+            warnings.append(warning)
         global _warned_missing_subtitles_filter
         if not _warned_missing_subtitles_filter:
-            logger.warning('当前 ffmpeg 缺少 subtitles 滤镜，本次运行将跳过字幕烧录。')
+            logger.warning(warning["message"])
             _warned_missing_subtitles_filter = True
         use_subtitles = False
 

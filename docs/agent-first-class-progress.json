@@ -2,7 +2,7 @@
   "schema_version": 1,
   "updated_at": "2026-05-31",
   "goal": "Make txt2audio a first-class LLM agent tool with schema-bound outputs, stable errors, observable long-running execution, artifact metadata, and an MCP-ready contract.",
-  "status": "in_progress",
+  "status": "completed",
   "tracks": [
     {
       "id": "stable-json-contracts",
@@ -44,7 +44,7 @@
       "id": "jsonl-events",
       "priority": "P2",
       "title": "Add machine-readable progress events for long runs",
-      "status": "in_progress",
+      "status": "completed",
       "acceptance": [
         "--events-jsonl PATH|- emits JSON Lines events.",
         "Final --json stdout remains a single JSON object.",
@@ -55,7 +55,7 @@
       "id": "mcp-wrapper",
       "priority": "P3",
       "title": "Expose txt2audio through MCP tools",
-      "status": "pending",
+      "status": "completed",
       "acceptance": [
         "MCP tools reuse the same input and output schemas.",
         "Read-only planning and validation tools are separate from side-effectful conversion.",
@@ -74,11 +74,13 @@
     "Added artifact metadata objects to run results and chapter manifests while keeping generated_outputs as a compatibility path list.",
     "Added tests for artifact metadata construction and manifest preservation.",
     "Added --events-jsonl PATH|- for JSON Lines progress events that do not pollute final stdout JSON.",
-    "Added schemas/event.schema.json and tests for stable event records."
+    "Added schemas/event.schema.json and tests for stable event records.",
+    "Added warning events for subtitle burn-in degradation when ffmpeg lacks the subtitles filter.",
+    "Added txt2audio-mcp stdio MCP server exposing validate, plan, convert, and manifest tools.",
+    "Mapped existing JSON schemas to MCP tool outputSchema and added read-only/destructive/idempotent annotations."
   ],
   "next_actions": [
-    "Wire warning events into dependency degradation paths such as subtitle burn-in fallback.",
-    "Add an end-to-end smoke test for --events-jsonl with a model-free/faked generation path.",
-    "Start P3 MCP wrapper design after event coverage is complete."
+    "Run a real MCP client smoke test from Claude Desktop or another MCP host.",
+    "Consider replacing the lightweight JSON-RPC wrapper with the official Python MCP SDK if dependency policy allows."
   ]
 }

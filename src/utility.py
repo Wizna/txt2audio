@@ -1021,6 +1021,7 @@ def cli_main_process():
                             i += 1
                             continue
                         if wav_path.is_file():
+                            video_warnings = []
                             try:
                                 output_file = transform_wav_to_video(
                                     number=idx,
@@ -1028,7 +1029,16 @@ def cli_main_process():
                                     toc=toc[idx],
                                     resources_dir=RESOURCES_DIR,
                                     keep_subtitles=args.keep_srt,
+                                    warnings=video_warnings,
                                 )
+                                if event_writer:
+                                    for warning in video_warnings:
+                                        event_writer.emit(
+                                            "warning",
+                                            chapter_index=idx,
+                                            clip_index=i,
+                                            **warning,
+                                        )
                                 generated_outputs.append(output_file)
                                 chapter_generated_outputs.append(output_file)
                                 artifact = _artifact_record(output_file, chapter_index=idx, clip_index=i, role="video")
@@ -1049,6 +1059,7 @@ def cli_main_process():
                                 if event_writer:
                                     event_writer.emit("error", error_code="media_conversion_failed", **failure)
                         elif mp3_path.is_file():
+                            video_warnings = []
                             try:
                                 output_file = transform_wav_to_video(
                                     number=idx,
@@ -1056,7 +1067,16 @@ def cli_main_process():
                                     toc=toc[idx],
                                     resources_dir=RESOURCES_DIR,
                                     keep_subtitles=args.keep_srt,
+                                    warnings=video_warnings,
                                 )
+                                if event_writer:
+                                    for warning in video_warnings:
+                                        event_writer.emit(
+                                            "warning",
+                                            chapter_index=idx,
+                                            clip_index=i,
+                                            **warning,
+                                        )
                                 generated_outputs.append(output_file)
                                 chapter_generated_outputs.append(output_file)
                                 artifact = _artifact_record(output_file, chapter_index=idx, clip_index=i, role="video")
