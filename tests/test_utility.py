@@ -276,7 +276,7 @@ class UtilityTests(unittest.TestCase):
             self.assertTrue(tmp_mp3.exists())
 
     def test_build_run_plan_reports_explicit_subtitle_export(self):
-        args = SimpleNamespace(video=False, srt=True, keep_srt=False)
+        args = SimpleNamespace(video=False, srt=True, keep_srt=False, chapter_manifest=True)
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir)
             with patch.object(utility, 'OUTPUT_DIR', output_dir):
@@ -293,6 +293,53 @@ class UtilityTests(unittest.TestCase):
         self.assertTrue(plan['generate_subtitles'])
         self.assertTrue(plan['keep_subtitles'])
         self.assertEqual(plan['output_format'], 'mp3')
+        self.assertTrue(plan['write_chapter_manifest'])
+        self.assertEqual(
+            plan['chapter_manifest_path'],
+            str(Path(temp_dir) / '书名' / 'chapter_manifest.json'),
+        )
+
+    def test_save_chapter_manifest_writes_json_atomically(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manifest_path = Path(temp_dir) / 'chapter_manifest.json'
+
+            result = utility.save_chapter_manifest(
+                manifest_path,
+                {
+                    'schema_version': 1,
+                    'book_name': '书名',
+                    'chapters': [{'index': 0, 'display_path': '书名/第一章'}],
+                },
+            )
+
+            self.assertEqual(result, str(manifest_path))
+            self.assertFalse((Path(temp_dir) / 'chapter_manifest.tmp.json').exists())
+            self.assertIn('"book_name": "书名"', manifest_path.read_text(encoding='utf-8'))
+
+    def test_build_chapter_manifest_records_chapter_results(self):
+        manifest = utility._build_chapter_manifest(
+            book_name='书名',
+            source_text_path=Path('/tmp/source.txt'),
+            book_output_dir=Path('/tmp/output/书名'),
+            output_format='mp3',
+            elapsed=1.24,
+            chapter_results=[
+                {
+                    'index': 0,
+                    'display_path': '书名/第一章',
+                    'status': 'generated',
+                    'clip_count': 1,
+                    'existing_outputs': [],
+                    'generated_outputs': ['/tmp/output/书名/第一章-1.mp3'],
+                    'failures': [],
+                }
+            ],
+        )
+
+        self.assertEqual(manifest['schema_version'], 1)
+        self.assertEqual(manifest['chapter_count'], 1)
+        self.assertEqual(manifest['elapsed_seconds'], 1.2)
+        self.assertEqual(manifest['chapters'][0]['status'], 'generated')
 
 
 if __name__ == '__main__':

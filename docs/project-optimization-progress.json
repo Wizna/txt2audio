@@ -181,7 +181,8 @@
         "Added explicit --srt export and --keep-srt video subtitle retention flags.",
         "JSON results now include generated_outputs, skipped_chapters, and failed_outputs for clearer run accounting.",
         "Added width-based cover title wrapping for long unspaced titles.",
-        "Consider M4B or chapter manifest export.",
+        "Added optional --chapter-manifest export for a machine-readable chapter/output report.",
+        "Consider M4B export.",
         "Human summaries now include the count of newly generated output files."
       ],
       "acceptance": [
@@ -192,21 +193,24 @@
   "latest_verification": {
     "date": "2026-05-31",
     "commands": [
-      "uv run python -m compileall src tests",
-      "uv run python -m unittest discover -s tests -p 'test_*.py'"
+            "uv run python -m compileall src tests",
+            "uv run python -m unittest discover -s tests -p 'test_*.py'",
+            "uv run txt2audio /private/tmp/txt2audio-plan-smoke.txt --plan-json --range all --srt",
+            "uv run txt2audio /private/tmp/txt2audio-plan-smoke.txt --plan-json --range all --chapter-manifest"
     ],
     "result": "passed",
     "notes": [
         "compileall completed successfully.",
-            "unittest discover ran 26 tests successfully after P0, P1, run-plan, SRT flag, output accounting, and cover wrapping additions.",
+            "unittest discover ran 28 tests successfully after P0, P1, run-plan, SRT flag, output accounting, cover wrapping, and chapter manifest additions.",
             "Targeted P1 utility/subtitle coverage passed without loading the TTS model.",
             "`uv run txt2audio /private/tmp/txt2audio-plan-smoke.txt --plan-json --range all` returned a model-free plan JSON successfully.",
-            "`uv run txt2audio /private/tmp/txt2audio-plan-smoke.txt --plan-json --range all --srt` reported subtitle export in the plan JSON."
+            "`uv run txt2audio /private/tmp/txt2audio-plan-smoke.txt --plan-json --range all --srt` reported subtitle export in the plan JSON.",
+            "`uv run txt2audio /private/tmp/txt2audio-plan-smoke.txt --plan-json --range all --chapter-manifest` reported the planned manifest path without loading TTS."
         ]
   },
     "next_step": {
         "track_id": "product-extras",
-        "title": "Evaluate M4B or chapter manifest export",
-        "why": "Cover long-title wrapping is implemented; the remaining product backlog is optional export packaging such as M4B or chapter manifests."
+        "title": "Evaluate M4B export",
+        "why": "Chapter manifest export is implemented and model-free verification passed; the remaining product backlog is optional M4B packaging."
     }
 }

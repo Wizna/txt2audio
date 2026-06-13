@@ -190,7 +190,8 @@
 候选能力：
 
 - 独立 SRT 导出开关。
-- M4B 或章节清单导出。
+- 章节清单导出。
+- M4B 导出。
 - 封面长标题自动换行、缩放或截断。
 - 更完整的 Windows 真机 smoke test 记录。
 - 运行摘要包含成功、跳过、失败文件列表。
@@ -213,5 +214,7 @@
 
 - `uv run python -m compileall src tests`
 - `uv run python -m unittest discover -s tests -p 'test_*.py'`
+- `uv run txt2audio /private/tmp/txt2audio-plan-smoke.txt --plan-json --range all`
+- `uv run txt2audio /private/tmp/txt2audio-plan-smoke.txt --plan-json --range all --srt`
 
-结果：语法检查通过，9 个 unittest 通过。
+结果：语法检查通过，28 个 unittest 通过；plan JSON smoke 通过，章节清单导出已完成 model-free 验证。

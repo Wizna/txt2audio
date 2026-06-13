@@ -106,6 +106,7 @@ def get_tts():
 book_delimiter = config['text_processing']['book_delimiter']
 SUPPORTED_INPUT_SUFFIXES = {'.txt', '.epub', '.mobi'}
 CONVERTED_TEXT_SUFFIX = '.txt2audio.txt'
+CHAPTER_MANIFEST_FILE_NAME = 'chapter_manifest.json'
 
 
 def load_txt_file(file_path):
@@ -548,6 +549,17 @@ def save_table_of_contents(file_path, table_of_contents: Dict):
             f.write(w)
 
 
+def save_chapter_manifest(file_path: Path, manifest: dict) -> str:
+    file_path = Path(file_path)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = tmp_output_path(file_path)
+    with open(tmp_path, 'w', encoding='utf-8') as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=2)
+        f.write('\n')
+    shutil.move(tmp_path, file_path)
+    return str(file_path)
+
+
 def _check_ffmpeg():
     """Check if ffmpeg is available on the system."""
     try:
@@ -677,7 +689,30 @@ def _build_run_plan(args, toc, output_targets, chapter_indices, book_name, book_
         "video": args.video,
         "generate_subtitles": generate_subtitles,
         "keep_subtitles": keep_subtitles,
+        "write_chapter_manifest": getattr(args, 'chapter_manifest', False),
+        "chapter_manifest_path": str(book_output_dir / CHAPTER_MANIFEST_FILE_NAME),
         "chapters": chapters,
+    }
+
+
+def _build_chapter_manifest(
+    *,
+    book_name,
+    source_text_path,
+    book_output_dir,
+    output_format,
+    elapsed,
+    chapter_results,
+):
+    return {
+        "schema_version": 1,
+        "book_name": book_name,
+        "source_text_file": str(source_text_path),
+        "output_directory": str(book_output_dir),
+        "output_format": output_format,
+        "elapsed_seconds": round(elapsed, 1),
+        "chapter_count": len(chapter_results),
+        "chapters": chapter_results,
     }
 
 
@@ -809,6 +844,7 @@ def cli_main_process():
     generated_outputs = []
     skipped_chapters = []
     conversion_failures = []
+    chapter_results = []
     show_progress = not args.json and not args.quiet
     generate_subtitles = args.srt or args.keep_srt or (args.video and config['video'].get('subtitles', False))
 
@@ -829,6 +865,9 @@ def cli_main_process():
 
             output_path = OUTPUT_DIR / output_targets[idx]
             output_path.parent.mkdir(parents=True, exist_ok=True)
+            chapter_generated_outputs = []
+            chapter_failures = []
+            chapter_existing_outputs = []
 
             clip_num = generate_audio_clip(
                 text=''.join(contents[idx]),
@@ -860,38 +899,46 @@ def cli_main_process():
                         continue
                     if wav_path.is_file():
                         try:
-                            generated_outputs.append(transform_wav_to_video(
+                            output_file = transform_wav_to_video(
                                 number=idx,
                                 audio=str(wav_path),
                                 toc=toc[idx],
                                 resources_dir=RESOURCES_DIR,
                                 keep_subtitles=args.keep_srt,
-                            ))
+                            )
+                            generated_outputs.append(output_file)
+                            chapter_generated_outputs.append(output_file)
                         except RuntimeError as e:
-                            conversion_failures.append({
+                            failure = {
                                 "chapter_index": idx,
                                 "clip_index": i,
                                 "input_file": str(wav_path),
                                 "target_file": str(mp4_path),
                                 "message": str(e),
-                            })
+                            }
+                            conversion_failures.append(failure)
+                            chapter_failures.append(failure)
                     elif mp3_path.is_file():
                         try:
-                            generated_outputs.append(transform_wav_to_video(
+                            output_file = transform_wav_to_video(
                                 number=idx,
                                 audio=str(mp3_path),
                                 toc=toc[idx],
                                 resources_dir=RESOURCES_DIR,
                                 keep_subtitles=args.keep_srt,
-                            ))
+                            )
+                            generated_outputs.append(output_file)
+                            chapter_generated_outputs.append(output_file)
                         except RuntimeError as e:
-                            conversion_failures.append({
+                            failure = {
                                 "chapter_index": idx,
                                 "clip_index": i,
                                 "input_file": str(mp3_path),
                                 "target_file": str(mp4_path),
                                 "message": str(e),
-                            })
+                            }
+                            conversion_failures.append(failure)
+                            chapter_failures.append(failure)
                     else:
                         break
                     i += 1
@@ -900,29 +947,68 @@ def cli_main_process():
                     wav_path = build_clip_output_path(output_path, i, '.wav')
                     mp3_path = build_clip_output_path(output_path, i, '.mp3')
                     try:
-                        generated_outputs.append(convert_wav_to_mp3(wav_path, bitrate=mp3_bitrate))
+                        output_file = convert_wav_to_mp3(wav_path, bitrate=mp3_bitrate)
+                        generated_outputs.append(output_file)
+                        chapter_generated_outputs.append(output_file)
                     except RuntimeError as e:
-                        conversion_failures.append({
+                        failure = {
                             "chapter_index": idx,
                             "clip_index": i,
                             "input_file": str(wav_path),
                             "target_file": str(mp3_path),
                             "message": str(e),
-                        })
+                        }
+                        conversion_failures.append(failure)
+                        chapter_failures.append(failure)
             elif audio_format == 'wav':
                 for i in clip_num:
-                    generated_outputs.append(str(build_clip_output_path(output_path, i, '.wav')))
+                    output_file = str(build_clip_output_path(output_path, i, '.wav'))
+                    generated_outputs.append(output_file)
+                    chapter_generated_outputs.append(output_file)
             if args.srt:
                 for i in clip_num:
                     srt_path = build_clip_output_path(output_path, i, '.srt')
                     if srt_path.is_file():
-                        generated_outputs.append(str(srt_path))
+                        output_file = str(srt_path)
+                        generated_outputs.append(output_file)
+                        chapter_generated_outputs.append(output_file)
+
+            if not clip_num:
+                chapter_status = "skipped"
+                chapter_existing_outputs = _existing_outputs(output_path)
+            elif chapter_failures:
+                chapter_status = "error"
+            else:
+                chapter_status = "generated"
+            chapter_results.append({
+                "index": idx,
+                "display_path": toc[idx],
+                "output_stem": str(output_path),
+                "status": chapter_status,
+                "clip_count": len(clip_num),
+                "existing_outputs": chapter_existing_outputs,
+                "generated_outputs": chapter_generated_outputs,
+                "failures": chapter_failures,
+            })
 
             progress.advance(task)
 
     elapsed = time.time() - start_time
     fmt = 'mp4' if args.video else audio_format
     out_dir = book_output_dir
+    chapter_manifest_path = None
+    if args.chapter_manifest:
+        chapter_manifest_path = save_chapter_manifest(
+            out_dir / CHAPTER_MANIFEST_FILE_NAME,
+            _build_chapter_manifest(
+                book_name=book_name,
+                source_text_path=source_text_path,
+                book_output_dir=out_dir,
+                output_format=fmt,
+                elapsed=elapsed,
+                chapter_results=chapter_results,
+            ),
+        )
 
     if args.json:
         result = {
@@ -938,6 +1024,8 @@ def cli_main_process():
             "generated_outputs": generated_outputs,
             "skipped_chapters": skipped_chapters,
         }
+        if chapter_manifest_path:
+            result["chapter_manifest"] = chapter_manifest_path
         if conversion_failures:
             result["error"] = "media_conversion_failed"
             result["failed_outputs"] = conversion_failures
@@ -951,6 +1039,8 @@ def cli_main_process():
             f"[green]输出[/green]  {out_dir}\n"
             f"[green]耗时[/green]  {_format_duration(elapsed)}"
         )
+        if chapter_manifest_path:
+            summary += f"\n[green]清单[/green]  {chapter_manifest_path}"
         if conversion_failures:
             failed_paths = '\n'.join(f"  {item['target_file']}: {item['message']}" for item in conversion_failures)
             summary += f"\n[red]转换失败[/red]  {len(conversion_failures)}\n{failed_paths}"
@@ -969,6 +1059,7 @@ def parse_arguments():
                '  txt2audio novel.epub --range all\n'
                '  txt2audio novel.txt --validate-paths --json\n'
                '  txt2audio novel.txt --plan-json\n'
+               '  txt2audio novel.txt --range all --chapter-manifest\n'
                '  txt2audio novel.txt --video --range 0~8 --json\n'
                '  txt2audio novel.txt --range all --srt\n'
                '  txt2audio novel.txt --range all --speed 0.95 --set audio.mp3_bitrate=192k\n'
@@ -1005,6 +1096,8 @@ def parse_arguments():
                         help='parse chapters and output paths without loading the TTS model or generating media')
     parser.add_argument('--plan-json', action='store_true',
                         help='output planned chapters and existing outputs as JSON without loading the TTS model')
+    parser.add_argument('--chapter-manifest', action='store_true',
+                        help='write output chapter_manifest.json after a generation run')
 
     args = parser.parse_args()
 

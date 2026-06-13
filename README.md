@@ -79,6 +79,7 @@ git submodule update --init --recursive
 ```bash
 uv run txt2audio your_book.txt --range all              # 纯音频（默认 MP3）
 uv run txt2audio your_book.txt --range all --srt        # 纯音频 + SRT 字幕文件
+uv run txt2audio your_book.txt --range all --chapter-manifest  # 生成章节清单 JSON
 uv run txt2audio your_book.epub --range all             # 首次会先生成 your_book.txt2audio.txt
 uv run txt2audio your_book.mobi --range all             # 首次会先生成 your_book.txt2audio.txt
 uv run txt2audio your_book.txt --video --range all      # 音频 + 视频（MP4）
@@ -149,6 +150,7 @@ uv run txt2audio your_book.txt --range all --quiet
 ```
 output/{书名}/
 ├── 目录.txt                              # 自动生成的目录
+├── chapter_manifest.json                 # --chapter-manifest 生成的章节/产物清单
 └── {卷名}/
     ├── {章名}-{片段}.mp3                  # 默认（纯音频，MP3 128kbps）
     ├── {章名}-{片段}.mp4                  # --video 模式
