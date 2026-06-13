@@ -203,9 +203,11 @@ def convert_wav_to_mp3(wav_path, bitrate='128k'):
     else:
         if tmp_path.is_file():
             os.remove(tmp_path)
-        logger.warning(f'MP3 conversion failed (code {ret.returncode}), keeping {wav_path}')
-        logger.warning(_decode_subprocess_output(ret.stderr))
-        return str(wav_path)
+        stderr = _decode_subprocess_output(ret.stderr).strip()
+        logger.error(f'MP3 conversion failed (code {ret.returncode}), keeping {wav_path}')
+        if stderr:
+            logger.error(stderr)
+        raise RuntimeError(f'MP3 conversion failed for {wav_path} (code {ret.returncode})')
 
 
 def check_export_file_exists(output_path, video_clip_index):
@@ -231,7 +233,7 @@ def check_export_file_exists(output_path, video_clip_index):
     return True
 
 
-def generate_audio_clip(text: str, output_path: str, sample_rate=None):
+def generate_audio_clip(text: str, output_path: str, sample_rate=None, generate_subtitles: bool = True):
     """将一章文本转为音频，按 MAX_CHARS_PER_CLIP 切分为多个片段（-1 则不分片）。
     同时收集句级时间戳，生成 SRT 字幕文件。"""
     torch_module, _ = _load_torch_modules()
@@ -280,7 +282,7 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=None):
         if MAX_CHARS_PER_CLIP > 0 and word_count > MAX_CHARS_PER_CLIP:
             combined = torch_module.cat(wav_chunks, dim=-1) if wav_chunks else None
             save_audio_file(combined, sample_rate, output_path, video_clip_index, exported_clip_indices)
-            if export and subtitle_entries:
+            if generate_subtitles and export and subtitle_entries:
                 save_subtitle_file(subtitle_entries, output_path, video_clip_index)
             video_clip_index += 1
             wav_chunks = []
@@ -291,7 +293,7 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=None):
 
     combined = torch_module.cat(wav_chunks, dim=-1) if wav_chunks else None
     save_audio_file(combined, sample_rate, output_path, video_clip_index, exported_clip_indices)
-    if export and subtitle_entries:
+    if generate_subtitles and export and subtitle_entries:
         save_subtitle_file(subtitle_entries, output_path, video_clip_index)
     return exported_clip_indices
 
@@ -310,6 +312,7 @@ def mask_punctuations(text):
     text = re.sub(
         r"(?:https?://(?:(?:(?:(?:(?:[a-zA-Z\d](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?)\.)*(?:[a-zA-Z](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?))|(?:(?:\d+)(?:\.(?:\d+)){3}))(?::(?:\d+))?)(?:/(?:(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[;:@&=])*)(?:/(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[;:@&=])*))*)(?:\?(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[;:@&=])*))?)?)|(?:s?ftp://(?:(?:(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[;?&=])*)(?::(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[;?&=])*))?@)?(?:(?:(?:(?:(?:[a-zA-Z\d](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?)\.)*(?:[a-zA-Z](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?))|(?:(?:\d+)(?:\.(?:\d+)){3}))(?::(?:\d+))?))(?:/(?:(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[?:@&=])*)(?:/(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[?:@&=])*))*)(?:;type=[AIDaid])?)?)|(?:news:(?:(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[;/?:&=])+@(?:(?:(?:(?:[a-zA-Z\d](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?)\.)*(?:[a-zA-Z](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?))|(?:(?:\d+)(?:\.(?:\d+)){3})))|(?:[a-zA-Z](?:[a-zA-Z\d]|[_.+-])*)|\*))|(?:nntp://(?:(?:(?:(?:(?:[a-zA-Z\d](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?)\.)*(?:[a-zA-Z](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?))|(?:(?:\d+)(?:\.(?:\d+)){3}))(?::(?:\d+))?)/(?:[a-zA-Z](?:[a-zA-Z\d]|[_.+-])*)(?:/(?:\d+))?)|(?:telnet://(?:(?:(?:(?:(?:[a-zA-Z\d$-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[;?&=])*)(?::(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[;?&=])*))?@)?(?:(?:(?:(?:(?:[a-zA-Z\d](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?)\.)*(?:[a-zA-Z](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?))|(?:(?:\d+)(?:\.(?:\d+)){3}))(?::(?:\d+))?))/?)|(?:gopher://(?:(?:(?:(?:(?:[a-zA-Z\d](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?)\.)*(?:[a-zA-Z](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?))|(?:(?:\d+)(?:\.(?:\d+)){3}))(?::(?:\d+))?)(?:/(?:[a-zA-Z\d$\-_.+!*'(),;/?:@&=]|(?:%[a-fA-F\d]{2}))(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),;/?:@&=]|(?:%[a-fA-F\d]{2}))*)(?:%09(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[;:@&=])*)(?:%09(?:(?:[a-zA-Z\d$\-_.+!*'(),;/?:@&=]|(?:%[a-fA-F\d]{2}))*))?)?)?)?)|(?:wais://(?:(?:(?:(?:(?:[a-zA-Z\d](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?)\.)*(?:[a-zA-Z](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?))|(?:(?:\d+)(?:\.(?:\d+)){3}))(?::(?:\d+))?)/(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))*)(?:(?:/(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))*)/(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))*))|\?(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[;:@&=])*))?)|(?:mailto:(?:(?:[a-zA-Z\d$\-_.+!*'(),;/?:@&=]|(?:%[a-fA-F\d]{2}))+))|(?:file://(?:(?:(?:(?:(?:[a-zA-Z\d](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?)\.)*(?:[a-zA-Z](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?))|(?:(?:\d+)(?:\.(?:\d+)){3}))|localhost)?/(?:(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[?:@&=])*)(?:/(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[?:@&=])*))*))|(?:prospero://(?:(?:(?:(?:(?:[a-zA-Z\d](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?)\.)*(?:[a-zA-Z](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?))|(?:(?:\d+)(?:\.(?:\d+)){3}))(?::(?:\d+))?)/(?:(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[?:@&=])*)(?:/(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[?:@&=])*))*)(?:(?:;(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[?:@&])*)=(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[?:@&])*)))*)|(?:ldap://(?:(?:(?:(?:(?:(?:[a-zA-Z\d](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?)\.)*(?:[a-zA-Z](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?))|(?:(?:\d+)(?:\.(?:\d+)){3}))(?::(?:\d+))?))?/(?:(?:(?:(?:(?:(?:(?:[a-zA-Z\d]|%(?:3\d|[46][a-fA-F\d]|[57][Aa\d]))|(?:%20))+|(?:OID|oid)\.(?:(?:\d+)(?:\.(?:\d+))*))(?:(?:%0[Aa])?(?:%20)*)=(?:(?:%0[Aa])?(?:%20)*))?(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))*))(?:(?:(?:%0[Aa])?(?:%20)*)\+(?:(?:%0[Aa])?(?:%20)*)(?:(?:(?:(?:(?:[a-zA-Z\d]|%(?:3\d|[46][a-fA-F\d]|[57][Aa\d]))|(?:%20))+|(?:OID|oid)\.(?:(?:\d+)(?:\.(?:\d+))*))(?:(?:%0[Aa])?(?:%20)*)=(?:(?:%0[Aa])?(?:%20)*))?(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))*)))*)(?:(?:(?:(?:%0[Aa])?(?:%20)*)(?:[;,])(?:(?:%0[Aa])?(?:%20)*))(?:(?:(?:(?:(?:(?:[a-zA-Z\d]|%(?:3\d|[46][a-fA-F\d]|[57][Aa\d]))|(?:%20))+|(?:OID|oid)\.(?:(?:\d+)(?:\.(?:\d+))*))(?:(?:%0[Aa])?(?:%20)*)=(?:(?:%0[Aa])?(?:%20)*))?(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))*))(?:(?:(?:%0[Aa])?(?:%20)*)\+(?:(?:%0[Aa])?(?:%20)*)(?:(?:(?:(?:(?:[a-zA-Z\d]|%(?:3\d|[46][a-fA-F\d]|[57][Aa\d]))|(?:%20))+|(?:OID|oid)\.(?:(?:\d+)(?:\.(?:\d+))*))(?:(?:%0[Aa])?(?:%20)*)=(?:(?:%0[Aa])?(?:%20)*))?(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))*)))*))*(?:(?:(?:%0[Aa])?(?:%20)*)(?:[;,])(?:(?:%0[Aa])?(?:%20)*))?)(?:\?(?:(?:(?:(?:[a-zA-Z\d$-_.+!*'(),]|(?:%[a-fA-F\d]{2}))+)(?:,(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))+))*)?)(?:\?(?:base|one|sub)(?:\?(?:((?:[a-zA-Z\d$\-_.+!*'(),;/?:@&=]|(?:%[a-fA-F\d]{2}))+)))?)?)?)|(?:(?:z39\.50[rs])://(?:(?:(?:(?:(?:[a-zA-Z\d](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?)\.)*(?:[a-zA-Z](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?))|(?:(?:\d+)(?:\.(?:\d+)){3}))(?::(?:d+))?)(?:/(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))+)(?:\+(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))+))*(?:\?(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))+))?)?(?:;esn=(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))+))?(?:;rs=(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))+)(?:\+(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))+))*)?))|(?:cid:(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[;?:@&=])*))|(?:mid:(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[;?:@&=])*)(?:/(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[;?:@&=])*))?)|(?:vemmi://(?:(?:(?:(?:(?:[a-zA-Z\d](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?)\.)*(?:[a-zA-Z](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?))|(?:(?:\d+)(?:\.(?:\d+)){3}))(?::(?:\d+))?)(?:/(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[/?:@&=])*)(?:(?:;(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[/?:@&])*)=(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[/?:@&])*))*))?)|(?:imap://(?:(?:(?:(?:(?:(?:(?:[a-zA-Z\d$-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[&=~])+)(?:(?:;[Aa][Uu][Tt][Hh]=(?:\*|(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[&=~])+))))?)|(?:(?:;[Aa][Uu][Tt][Hh]=(?:\*|(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-Fd]{2}))|[&=~])+)))(?:(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[&=~])+))?))@)?(?:(?:(?:(?:(?:[a-zA-Z\d](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?)\.)*(?:[a-zA-Z](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?))|(?:(?:\d+)(?:.(?:\d+)){3}))(?::(?:\d+))?))/(?:(?:(?:(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[&=~:@/])+)?;[Tt][Yy][Pp][Ee]=(?:[Ll](?:[Ii][Ss][Tt]|[Ss][Uu][Bb])))|(?:(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[&=~:@/])+)(?:\?(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[&=~:@/])+))?(?:(?:;[Uu][Ii][Dd][Vv][Aa][Ll][Ii][Dd][Ii][Tt][Yy]=(?:[1-9]\d*)))?)|(?:(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[&=~:@/])+)(?:(?:;[Uu][Ii][Dd][Vv][Aa][Ll][Ii][Dd][Ii][Tt][Yy]=(?:[1-9]\d*)))?(?:/;[Uu][Ii][Dd]=(?:[1-9]\d*))(?:(?:/;[Ss][Ee][Cc][Tt][Ii][Oo][Nn]=(?:(?:(?:[a-zA-Z\d$\-_.+!*'(),]|(?:%[a-fA-F\d]{2}))|[&=~:@/])+)))?)))?)|(?:nfs:(?:(?://(?:(?:(?:(?:(?:[a-zA-Z\d](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?)\.)*(?:[a-zA-Z](?:(?:[a-zA-Z\d]|-)*[a-zA-Z\d])?))|(?:(?:\d+)(?:\.(?:\d+)){3}))(?::(?:\d+))?)(?:(?:/(?:(?:(?:(?:(?:[a-zA-Z\d\$\-_.!~*'(),])|(?:%[a-fA-F\d]{2})|[:@&=+])*)(?:/(?:(?:(?:[a-zA-Z\d\$\-_.!~*'(),])|(?:%[a-fA-F\d]{2})|[:@&=+])*))*)?)))?)|(?:/(?:(?:(?:(?:(?:[a-zA-Z\d\$\-_.!~*'(),])|(?:%[a-fA-F\d]{2})|[:@&=+])*)(?:/(?:(?:(?:[a-zA-Z\d\$\-_.!~*'(),])|(?:%[a-fA-F\d]{2})|[:@&=+])*))*)?))|(?:(?:(?:(?:(?:[a-zA-Z\d\$\-_.!~*'(),])|(?:%[a-fA-F\d]{2})|[:@&=+])*)(?:/(?:(?:(?:[a-zA-Z\d\$\-_.!~*'(),])|(?:%[a-fA-F\d]{2})|[:@&=+])*))*)?)))",
         '', text)
+    text = text.strip()
 
     if not text or not re.search(u'[\u4e00-\u9fff0-9a-zA-Z]+', text):
         return ''
@@ -723,10 +726,14 @@ def cli_main_process():
                 console.print(f"  [dim]上次生成到第 {idx} 章[/dim]")
             break
 
-    if args.range is not None:
-        span = parse_range_string(args.range, total=max(toc.keys()))
-    else:
-        span = ask_for_output_range(total=max(toc.keys()))
+    try:
+        if args.range is not None:
+            span = parse_range_string(args.range, total=max(toc.keys()))
+        else:
+            span = ask_for_output_range(total=max(toc.keys()))
+    except ValueError as e:
+        _report_error(args, "invalid_range", str(e))
+        return 1
 
     # 预计算章节列表（保留遇到空隙即停止的行为）
     chapter_indices = []
@@ -739,7 +746,9 @@ def cli_main_process():
     chapters_generated = 0
     chapters_skipped = 0
     total_clips = 0
+    conversion_failures = []
     show_progress = not args.json and not args.quiet
+    generate_subtitles = args.video and config['video'].get('subtitles', False)
 
     with Progress(
         SpinnerColumn(),
@@ -759,7 +768,11 @@ def cli_main_process():
             output_path = OUTPUT_DIR / output_targets[idx]
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
-            clip_num = generate_audio_clip(text=''.join(contents[idx]), output_path=str(output_path))
+            clip_num = generate_audio_clip(
+                text=''.join(contents[idx]),
+                output_path=str(output_path),
+                generate_subtitles=generate_subtitles,
+            )
 
             if clip_num:
                 chapters_generated += 1
@@ -778,17 +791,46 @@ def cli_main_process():
                         i += 1
                         continue
                     if wav_path.is_file():
-                        transform_wav_to_video(number=idx, audio=str(wav_path), toc=toc[idx],
-                                               resources_dir=RESOURCES_DIR)
+                        try:
+                            transform_wav_to_video(number=idx, audio=str(wav_path), toc=toc[idx],
+                                                   resources_dir=RESOURCES_DIR)
+                        except RuntimeError as e:
+                            conversion_failures.append({
+                                "chapter_index": idx,
+                                "clip_index": i,
+                                "input_file": str(wav_path),
+                                "target_file": str(mp4_path),
+                                "message": str(e),
+                            })
                     elif mp3_path.is_file():
-                        transform_wav_to_video(number=idx, audio=str(mp3_path), toc=toc[idx],
-                                               resources_dir=RESOURCES_DIR)
+                        try:
+                            transform_wav_to_video(number=idx, audio=str(mp3_path), toc=toc[idx],
+                                                   resources_dir=RESOURCES_DIR)
+                        except RuntimeError as e:
+                            conversion_failures.append({
+                                "chapter_index": idx,
+                                "clip_index": i,
+                                "input_file": str(mp3_path),
+                                "target_file": str(mp4_path),
+                                "message": str(e),
+                            })
                     else:
                         break
                     i += 1
             elif audio_format == 'mp3':
                 for i in clip_num:
-                    convert_wav_to_mp3(build_clip_output_path(output_path, i, '.wav'), bitrate=mp3_bitrate)
+                    wav_path = build_clip_output_path(output_path, i, '.wav')
+                    mp3_path = build_clip_output_path(output_path, i, '.mp3')
+                    try:
+                        convert_wav_to_mp3(wav_path, bitrate=mp3_bitrate)
+                    except RuntimeError as e:
+                        conversion_failures.append({
+                            "chapter_index": idx,
+                            "clip_index": i,
+                            "input_file": str(wav_path),
+                            "target_file": str(mp3_path),
+                            "message": str(e),
+                        })
 
             progress.advance(task)
 
@@ -798,7 +840,7 @@ def cli_main_process():
 
     if args.json:
         result = {
-            "status": "success",
+            "status": "error" if conversion_failures else "success",
             "book_name": book_name,
             "chapters_generated": chapters_generated,
             "chapters_skipped": chapters_skipped,
@@ -808,6 +850,9 @@ def cli_main_process():
             "source_text_file": str(source_text_path),
             "elapsed_seconds": round(elapsed, 1),
         }
+        if conversion_failures:
+            result["error"] = "media_conversion_failed"
+            result["failures"] = conversion_failures
         print(json.dumps(result, ensure_ascii=False))
     else:
         summary = (
@@ -817,8 +862,13 @@ def cli_main_process():
             f"[green]输出[/green]  {out_dir}\n"
             f"[green]耗时[/green]  {_format_duration(elapsed)}"
         )
-        console.print(Panel(summary, title="[bold green]完成[/bold green]", border_style="green"))
-    return 0
+        if conversion_failures:
+            failed_paths = '\n'.join(f"  {item['target_file']}: {item['message']}" for item in conversion_failures)
+            summary += f"\n[red]转换失败[/red]  {len(conversion_failures)}\n{failed_paths}"
+            console.print(Panel(summary, title="[bold red]部分失败[/bold red]", border_style="red"))
+        else:
+            console.print(Panel(summary, title="[bold green]完成[/bold green]", border_style="green"))
+    return 1 if conversion_failures else 0
 
 
 def parse_arguments():
@@ -876,19 +926,27 @@ def parse_arguments():
 
 
 def parse_range_string(var, total):
+    var = var.strip()
     if len(var) == 0 or var == 'all':
         return range(total + 1)
-    else:
-        indices = re.split('[~-]', var)
-        if len(indices) not in (1, 2):
-            raise ValueError("请输入单个数字或者一个范围, e.g. 8 or 0~8")
-        if len(indices) == 1:
-            s = int(indices[0])
-            return range(s, s + 1)
-        else:
-            s = int(indices[0])
-            e = int(indices[1])
-            return range(s, e + 1)
+
+    if not re.fullmatch(r'\d+(?:[~-]\d+)?', var):
+        raise ValueError("请输入 all、单个非负数字，或者范围，例如 8 或 0~8")
+
+    indices = re.split('[~-]', var)
+    if len(indices) == 1:
+        s = int(indices[0])
+        if s > total:
+            raise ValueError(f"章节编号超出范围: {s}，最大编号为 {total}")
+        return range(s, s + 1)
+
+    s = int(indices[0])
+    e = int(indices[1])
+    if s > e:
+        raise ValueError(f"章节范围起点不能大于终点: {s}~{e}")
+    if e > total:
+        raise ValueError(f"章节编号超出范围: {e}，最大编号为 {total}")
+    return range(s, e + 1)
 
 
 def ask_for_output_range(total):

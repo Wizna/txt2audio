@@ -1,0 +1,209 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-05-31",
+  "goal": "Improve txt2audio reliability, documentation accuracy, and test coverage while preserving existing chapter parsing and CosyVoice behavior.",
+  "source_context": [
+    "AGENTS.md",
+    "CLAUDE.md",
+    "README.md",
+    "config.yaml",
+    "docs/platform-support-plan.md",
+    "src/utility.py",
+    "src/video.py",
+    "src/subtitle.py",
+    "src/pathing.py",
+    "tests/"
+  ],
+  "guardrails": [
+    "Do not broaden chapter-recognition regex before baseline tests are added.",
+    "Keep annotate_polyphones() before mask_punctuations().",
+    "Keep tmp-file atomic writes for wav, mp3, mp4, srt, and future export formats.",
+    "Preserve check_export_file_exists() resume behavior.",
+    "Do not upgrade the pinned CosyVoice-compatible torch stack without audio quality verification.",
+    "Treat CosyVoice frontend text normalization as the owner of ttsfrd/wetext fallback unless code changes explicitly move that responsibility."
+  ],
+  "tracks": [
+    {
+      "id": "media-conversion-failure-status",
+      "priority": "P0",
+      "title": "Make media conversion failures affect CLI status and exit code",
+      "status": "completed",
+      "current_issue": "MP3 and MP4 conversion failures are logged but can still leave the main CLI reporting success.",
+      "implementation_notes": [
+        "MP3 and MP4 conversion helpers now raise RuntimeError on ffmpeg failure after cleaning tmp outputs.",
+        "cli_main_process() aggregates conversion failures and returns exit code 1 when any conversion fails.",
+        "JSON and human output include failed target paths and error messages."
+      ],
+      "acceptance": [
+        "ffmpeg failure exits with code 1.",
+        "JSON mode reports a non-success status and failure details.",
+        "Successful conversion still uses tmp -> final atomic replacement."
+      ]
+    },
+    {
+      "id": "range-error-handling",
+      "priority": "P0",
+      "title": "Return structured errors for invalid --range values",
+      "status": "completed",
+      "current_issue": "Invalid range input can raise an uncaught exception, and reverse ranges can become empty successful runs.",
+      "implementation_notes": [
+        "parse_range_string() validates allowed forms: all, N, start~end, start-end.",
+        "Negative, non-numeric, reversed, and out-of-range values are rejected with clear messages.",
+        "cli_main_process() routes invalid range errors through _report_error()."
+      ],
+      "acceptance": [
+        "--json --range abc returns a JSON error and exit code 1.",
+        "--range 8~0 returns an error.",
+        "Existing all, 5, and 0~8 behavior remains unchanged."
+      ]
+    },
+    {
+      "id": "srt-generation-policy",
+      "priority": "P0",
+      "title": "Generate SRT only when requested by the active output workflow",
+      "status": "completed",
+      "current_issue": "Pure audio runs can leave .srt subtitle files even though SRT is currently described as an intermediate video subtitle artifact.",
+      "implementation_notes": [
+        "generate_audio_clip() now accepts generate_subtitles.",
+        "The CLI enables SRT generation only for --video with video.subtitles=true.",
+        "A future explicit keep/export subtitle CLI flag remains a backlog option."
+      ],
+      "acceptance": [
+        "Default MP3/WAV runs do not create .srt files.",
+        "Video subtitle mode still burns subtitles and cleans SRT after successful MP4 creation.",
+        "Video failure preserves useful intermediate files for retry/debugging."
+      ]
+    },
+    {
+      "id": "chapter-parser-baseline-tests",
+      "priority": "P1",
+      "title": "Add regression tests before changing chapter recognition",
+      "status": "partially_completed",
+      "current_issue": "Chapter parsing is behaviorally important and sensitive to regex changes, but construct_text_and_name() has no direct test coverage.",
+      "implementation_notes": [
+        "Added baseline tests for current Chinese numeral volume/chapter parsing.",
+        "Added coverage for intro fallback and duplicate heading behavior.",
+        "Added coverage for display/output path separation.",
+        "More special-section fixtures can still be added before any parser expansion."
+      ],
+      "acceptance": [
+        "Baseline tests pass without changing parser behavior.",
+        "Future parser enhancements can be reviewed against these tests."
+      ]
+    },
+    {
+      "id": "docs-accuracy",
+      "priority": "P1",
+      "title": "Align README and CLAUDE.md with current implementation",
+      "status": "completed",
+      "current_issue": "CLAUDE.md still mentions split_long_sentences(), broad polyphone coverage, and no formal tests, which no longer match the codebase.",
+      "implementation_notes": [
+        "README and CLAUDE.md now describe CosyVoice frontend ttsfrd/wetext fallback accurately.",
+        "Docs now describe the current conservative polyphone coverage instead of broad planned examples.",
+        "CLAUDE.md testing section now mentions compileall and the existing unittest suite."
+      ],
+      "acceptance": [
+        "Docs no longer claim functions or coverage that are absent from current code.",
+        "Agent-facing instructions match current CLI behavior."
+      ]
+    },
+    {
+      "id": "core-function-tests",
+      "priority": "P1",
+      "title": "Expand pure-function unit coverage",
+      "status": "completed",
+      "current_issue": "Several high-impact helpers have little or no test coverage.",
+      "implementation_notes": [
+        "Added coverage for parse_range_string(), split_subtitle_entries(), format_srt_time(), mask_punctuations(), and annotate_polyphones().",
+        "Added model-free generate_audio_clip subtitle-policy coverage with fakes.",
+        "Tests remain lightweight and do not load the real TTS model."
+      ],
+      "acceptance": [
+        "uv run python -m unittest discover -s tests -p 'test_*.py' covers these helpers.",
+        "The suite remains fast and model-free."
+      ]
+    },
+    {
+      "id": "text-preprocessing-ownership",
+      "priority": "P2",
+      "title": "Clarify and optionally expose text preprocessing ownership",
+      "status": "planned",
+      "current_issue": "Project-level punctuation cleanup and CosyVoice frontend normalization both affect text, but ownership is mostly implicit.",
+      "implementation_notes": [
+        "Keep novel-specific cleanup in txt2audio.",
+        "Leave text normalization and split_paragraph behavior to CosyVoice unless a tested reason exists.",
+        "Either wire model_sentence_limit into behavior or keep it documented as informational."
+      ],
+      "acceptance": [
+        "No duplicate hard-to-verify normalization layer is added.",
+        "Config and docs clearly describe which layer owns each transformation."
+      ]
+    },
+    {
+      "id": "polyphone-expansion",
+      "priority": "P2",
+      "title": "Expand polyphone annotations only with sampled audio validation",
+      "status": "planned",
+      "current_issue": "The docs have historically described broader polyphone support than the current conservative implementation.",
+      "implementation_notes": [
+        "Add only high-value characters that are often misread and tokenized reliably.",
+        "Keep annotations sparse to preserve naturalness.",
+        "Pair each addition with focused text samples."
+      ],
+      "acceptance": [
+        "Token legality is covered by tests.",
+        "Representative audio samples are checked before documenting broader support."
+      ]
+    },
+    {
+      "id": "run-plan-json",
+      "priority": "P2",
+      "title": "Add an optional run-plan JSON mode",
+      "status": "planned",
+      "current_issue": "Agents can validate paths today, but cannot inspect planned generation and resume actions without starting media generation.",
+      "implementation_notes": [
+        "Keep this separate from --validate-paths.",
+        "Report selected chapters, target files, existing/skipped outputs, output format, and subtitle/video actions.",
+        "Do not load the TTS model."
+      ],
+      "acceptance": [
+        "Plan mode is deterministic and model-free.",
+        "JSON output is suitable for preflight confirmation."
+      ]
+    },
+    {
+      "id": "product-extras",
+      "priority": "P3",
+      "title": "Evaluate optional export and UX enhancements",
+      "status": "backlog",
+      "current_issue": "Useful additions exist, but they should not precede reliability fixes.",
+      "implementation_notes": [
+        "Consider explicit SRT export/keep flags.",
+        "Consider M4B or chapter manifest export.",
+        "Improve cover long-title wrapping and scaling.",
+        "Include success/skipped/failed file lists in summaries."
+      ],
+      "acceptance": [
+        "Selected enhancements are implemented only after P0 issues are resolved."
+      ]
+    }
+  ],
+  "latest_verification": {
+    "date": "2026-05-31",
+    "commands": [
+      "uv run python -m compileall src tests",
+      "uv run python -m unittest discover -s tests -p 'test_*.py'"
+    ],
+    "result": "passed",
+    "notes": [
+      "compileall completed successfully.",
+      "unittest discover ran 20 tests successfully after P0 and P1 additions.",
+      "Targeted P1 utility/subtitle coverage passed without loading the TTS model."
+    ]
+  },
+  "next_step": {
+    "track_id": "chapter-parser-baseline-tests",
+    "title": "Add remaining special-section fixtures before parser enhancements",
+    "why": "The main P0 fixes and core helper coverage are complete; chapter parser behavior should get a few more fixtures before any recognition rules are broadened."
+  }
+}

@@ -154,4 +154,7 @@ def transform_wav_to_video(number, audio, toc, resources_dir):
         if tmp_video_path.is_file():
             os.remove(tmp_video_path)
         logger.error(f'ffmpeg failed (code {ret.returncode}), keeping {audio}')
-        logger.error(ret.stderr.decode(errors='replace'))
+        stderr = ret.stderr.decode(errors='replace').strip()
+        if stderr:
+            logger.error(stderr)
+        raise RuntimeError(f'Video conversion failed for {audio} (code {ret.returncode})')

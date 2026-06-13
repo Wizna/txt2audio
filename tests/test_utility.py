@@ -1,0 +1,170 @@
+import tempfile
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import sys
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT / 'src'))
+
+import utility  # noqa: E402
+import video  # noqa: E402
+
+
+class FakeTensor:
+    def __init__(self, samples=1000):
+        self.shape = (1, samples)
+
+    def numel(self):
+        return self.shape[-1]
+
+    def dim(self):
+        return len(self.shape)
+
+    def unsqueeze(self, dim):
+        return self
+
+
+class FakeTorch:
+    @staticmethod
+    def zeros(channels, samples):
+        return FakeTensor(samples)
+
+    @staticmethod
+    def cat(chunks, dim=-1):
+        return FakeTensor(sum(chunk.shape[-1] for chunk in chunks))
+
+
+class FakeTts:
+    sample_rate = 1000
+
+    def inference_zero_shot(self, *args, **kwargs):
+        yield {'tts_speech': FakeTensor(1000)}
+
+
+class UtilityTests(unittest.TestCase):
+    def test_parse_range_string_accepts_existing_forms(self):
+        self.assertEqual(list(utility.parse_range_string('all', total=8)), list(range(9)))
+        self.assertEqual(list(utility.parse_range_string('5', total=8)), [5])
+        self.assertEqual(list(utility.parse_range_string('0~2', total=8)), [0, 1, 2])
+        self.assertEqual(list(utility.parse_range_string('0-2', total=8)), [0, 1, 2])
+
+    def test_parse_range_string_rejects_invalid_values(self):
+        invalid_values = ['abc', '-1', '8~0', '0~9']
+        for value in invalid_values:
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    utility.parse_range_string(value, total=8)
+
+    def test_convert_wav_to_mp3_raises_on_ffmpeg_failure(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            wav_path = Path(temp_dir) / 'chapter-1.wav'
+            wav_path.write_bytes(b'wav')
+            failed = SimpleNamespace(returncode=1, stderr=b'bad codec')
+
+            with patch.object(utility._subprocess, 'run', return_value=failed):
+                with self.assertRaises(RuntimeError):
+                    utility.convert_wav_to_mp3(wav_path)
+
+            self.assertTrue(wav_path.is_file())
+            self.assertFalse(wav_path.with_suffix('.mp3').exists())
+
+    def test_transform_wav_to_video_raises_on_ffmpeg_failure(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            audio_path = Path(temp_dir) / 'chapter-1.wav'
+            audio_path.write_bytes(b'wav')
+            image_path = Path(temp_dir) / 'cover.jpg'
+            image_path.write_bytes(b'jpg')
+            failed = SimpleNamespace(returncode=1, stdout=b'', stderr=b'ffmpeg failed')
+
+            with patch.object(video, 'create_image_from_text', return_value=str(image_path)):
+                with patch.object(video.subprocess, 'run', return_value=failed):
+                    with self.assertRaises(RuntimeError):
+                        video.transform_wav_to_video(0, str(audio_path), '书/章', Path(temp_dir))
+
+            self.assertTrue(audio_path.is_file())
+            self.assertFalse(audio_path.with_suffix('.mp4').exists())
+
+    def test_generate_audio_clip_can_skip_subtitle_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_stem = Path(temp_dir) / 'chapter'
+            saved_indices = []
+
+            def fake_save_audio_file(wav_tensor, sample_rate, output_path, video_clip_index, export_indices):
+                saved_indices.append(video_clip_index)
+                export_indices.append(video_clip_index)
+
+            with patch.object(utility, '_load_torch_modules', return_value=(FakeTorch, None)):
+                with patch.object(utility, 'get_tts', return_value=FakeTts()):
+                    with patch.object(utility, 'check_export_file_exists', return_value=True):
+                        with patch.object(utility, 'save_audio_file',
+                                          side_effect=fake_save_audio_file):
+                            result = utility.generate_audio_clip(
+                                '你好。',
+                                str(output_stem),
+                                sample_rate=1000,
+                                generate_subtitles=False,
+                            )
+
+            self.assertEqual(result, [1])
+            self.assertEqual(saved_indices, [1])
+            self.assertFalse((Path(temp_dir) / 'chapter-1.srt').exists())
+
+    def test_construct_text_and_name_preserves_current_chapter_parsing(self):
+        raw_data = '\n'.join([
+            '开篇文字',
+            '第一卷',
+            '第一章',
+            '第一章内容。',
+            '第一章',
+            '重复标题不应开新章。',
+            '第二章',
+            '第二章内容。',
+            '后记',
+            '后记内容。',
+        ])
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            with patch.object(utility, 'OUTPUT_DIR', output_dir):
+                toc, output_targets, contents = utility.construct_text_and_name(raw_data, '书名')
+
+        self.assertEqual(toc, {
+            0: '书名/引言',
+            1: '书名/第一卷/第一章',
+            2: '书名/第一卷/第二章',
+            3: '书名/第一卷/第二章/后记',
+        })
+        self.assertEqual(output_targets[1], Path('书名/第一卷/第一章'))
+        self.assertEqual(contents[1], ['第一章内容。', '第一章', '重复标题不应开新章。'])
+
+    def test_construct_text_and_name_sanitizes_output_without_changing_display_path(self):
+        raw_data = '\n'.join([
+            '第一章',
+            '正文。',
+            '第二章',
+            '继续。',
+        ])
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            with patch.object(utility, 'OUTPUT_DIR', output_dir):
+                toc, output_targets, _ = utility.construct_text_and_name(raw_data, '书:名?')
+
+        self.assertEqual(toc[0], '书:名?/第一章')
+        self.assertEqual(output_targets[0], Path('书_名_', '第一章'))
+
+    def test_mask_punctuations_removes_urls_and_normalizes_sentence_end(self):
+        self.assertEqual(utility.mask_punctuations('他说——你好 https://example.com'), '他说，你好。')
+        self.assertEqual(utility.mask_punctuations('※※※'), '')
+
+    def test_annotate_polyphones_marks_current_supported_character(self):
+        self.assertEqual(utility.annotate_polyphones('校对文本'), '[j][iào]对文本')
+        self.assertNotIn('[', utility.annotate_polyphones('普通文本'))
+
+
+if __name__ == '__main__':
+    unittest.main()

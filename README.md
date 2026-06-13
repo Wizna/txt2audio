@@ -13,9 +13,9 @@
   - `epub` / `mobi` 自动转换为可复用的 `.txt2audio.txt`
   - 三层文本预处理，各层各司其职：
     - 小说专用标点清洗 —— 破折号、省略号、引号、URL 等
-    - `wetext` 文本归一化 —— 数字/符号自动转口语形式
+    - CosyVoice frontend 文本归一化 —— 优先 `ttsfrd`，否则回落到 `wetext`
     - CosyVoice 内置清理与分段
-  - 多音字智能标注 —— 使用 `pypinyin` 根据上下文为多音字（如 的/得/地、为/wéi/wèi）添加拼音标注
+  - 多音字保守标注 —— 使用 `pypinyin` 对高频易错字做少量拼音标注，避免过度标注影响自然度
 - **音频生成**
   - 声音克隆 —— 提供一段参考音频即可用该声音朗读全书
   - 每个音频片段约 30 分钟（6300 汉字）
@@ -254,7 +254,7 @@ paths:
 - 本项目当前正式支持 Python **3.11 / 3.12**；暂不声明 Python 3.13+ 支持
 - 本项目在 **macOS Apple Silicon（M1~M4）** 上开发测试，0.5B 模型 CPU 推理约需 16GB 内存
 - Windows x64 兼容改造进行中；路径与配置覆盖链路已适配，但完整 MP3 / MP4 / 字幕烧录仍需真机验证
-- macOS ARM 上 WeTextProcessing 可能存在编译问题，项目使用 `wetext` 替代
+- CosyVoice frontend 会优先使用 `ttsfrd`，否则回落到 `wetext`；两者都不可用时会退化为基础文本清理
 - 输出 MP3 或生成视频时依赖 `ffmpeg`；若只输出 WAV，则不需要安装
 - `epub` / `mobi` 输入依赖 Calibre 的 `ebook-convert`；若未安装，程序会直接报错提示
 - 字幕位置通过 `subtitle_style` 中的 `MarginV` 和 `Alignment` 控制。由于 ffmpeg 内部将 SRT 转为 ASS 时使用 `PlayResY=288` 坐标系，`MarginV` 的实际像素 = 设定值 × 视频高度 / 288。竖屏 (1280px) 约 4.4 倍，横屏 (720px) 约 2.5 倍。调整字幕位置时请注意与封面上的章节号（位于画面 77% 高度处）保持间距。
