@@ -47,6 +47,37 @@ class FakeTts:
         yield {'tts_speech': FakeTensor(1000)}
 
 
+class FakeWord:
+    def __init__(self, word, start, end):
+        self.word = word
+        self.start = start
+        self.end = end
+
+
+class FakeSegment:
+    def __init__(self, words):
+        self.words = words
+
+
+class FakeAlignResult:
+    def __init__(self, segments):
+        self.segments = segments
+
+
+class FakeAligner:
+    def __init__(self, result=None):
+        self.result = result or FakeAlignResult([])
+        self.calls = []
+
+    def align(self, audio, text, **kwargs):
+        self.calls.append({
+            'audio': audio,
+            'text': text,
+            'kwargs': kwargs,
+        })
+        return self.result
+
+
 class UtilityTests(unittest.TestCase):
     def test_parse_range_string_accepts_existing_forms(self):
         self.assertEqual(list(utility.parse_range_string('all', total=8)), list(range(9)))
@@ -198,16 +229,189 @@ class UtilityTests(unittest.TestCase):
                     with patch.object(utility, 'check_export_file_exists', return_value=True):
                         with patch.object(utility, 'save_audio_file',
                                           side_effect=fake_save_audio_file):
-                            result = utility.generate_audio_clip(
-                                '你好。',
-                                str(output_stem),
-                                sample_rate=1000,
-                                generate_subtitles=False,
-                            )
+                            with patch.object(utility, 'get_stable_aligner', return_value=FakeAligner()):
+                                result = utility.generate_audio_clip(
+                                    '你好。',
+                                    str(output_stem),
+                                    sample_rate=1000,
+                                    generate_subtitles=False,
+                                )
 
             self.assertEqual(result, [1])
             self.assertEqual(saved_indices, [1])
             self.assertFalse((Path(temp_dir) / 'chapter-1.srt').exists())
+
+    def test_build_clip_specs_preserves_clip_boundary_semantics(self):
+        sentences = [
+            utility.SentenceSpec('甲。', '甲。', '甲', 3),
+            utility.SentenceSpec('乙。', '乙。', '乙', 3),
+            utility.SentenceSpec('丙。', '丙。', '丙', 3),
+        ]
+        with patch.object(utility, 'MAX_CHARS_PER_CLIP', 5):
+            clips = utility._build_clip_specs(sentences)
+
+        self.assertEqual([clip.index for clip in clips], [1, 2, 3])
+        self.assertEqual([len(clip.sentences) for clip in clips], [1, 1, 1])
+
+    def test_build_batch_specs_groups_short_sentences(self):
+        sentences = [
+            utility.SentenceSpec('a。', 'a' * 20 + '。', 'a', 20),
+            utility.SentenceSpec('b。', 'b' * 22 + '。', 'b', 22),
+            utility.SentenceSpec('c。', 'c' * 18 + '。', 'c', 18),
+        ]
+        batches = utility._build_batch_specs(sentences)
+
+        self.assertEqual(len(batches), 1)
+        self.assertEqual(batches[0].sentences, sentences)
+
+    def test_build_batch_specs_keeps_long_sentence_separate(self):
+        sentences = [
+            utility.SentenceSpec('a。', 'a' * 45 + '。', 'a', 45),
+            utility.SentenceSpec('b。', 'b' * 20 + '。', 'b', 20),
+        ]
+        batches = utility._build_batch_specs(sentences)
+
+        self.assertEqual(len(batches), 2)
+        self.assertEqual(len(batches[0].sentences), 1)
+        self.assertEqual(len(batches[1].sentences), 1)
+
+    def test_map_alignment_to_sentences_uses_word_timings(self):
+        sentences = [
+            utility.SentenceSpec('你好。', '你好。', '你好', 2),
+            utility.SentenceSpec('世界。', '世界。', '世界', 2),
+        ]
+        units = [
+            {'text': '你好', 'start': 0.0, 'end': 0.8},
+            {'text': '世界', 'start': 0.8, 'end': 1.6},
+        ]
+
+        entries = utility._map_alignment_to_sentences(sentences, units)
+
+        self.assertEqual(entries, [
+            (0.0, 0.8, '你好'),
+            (0.8, 1.6, '世界'),
+        ])
+
+    def test_align_sentences_with_audio_uses_sentence_order(self):
+        sentences = [
+            utility.SentenceSpec('你好。', '你好。', '你好', 2),
+            utility.SentenceSpec('世界。', '世界。', '世界', 2),
+        ]
+        aligner = FakeAligner(FakeAlignResult([
+            FakeSegment([
+                FakeWord('你好', 0.0, 0.8),
+                FakeWord('世界', 0.8, 1.6),
+            ])
+        ]))
+
+        with patch.object(utility, 'get_stable_aligner', return_value=aligner):
+            entries = utility._align_sentences_with_audio(sentences, Path('/tmp/chapter-1.wav'))
+
+        self.assertEqual(entries, [
+            (0.0, 0.8, '你好'),
+            (0.8, 1.6, '世界'),
+        ])
+        self.assertEqual(aligner.calls[0]['text'], '你好世界')
+        self.assertEqual(aligner.calls[0]['kwargs']['language'], 'zh')
+        self.assertFalse(aligner.calls[0]['kwargs']['regroup'])
+
+    def test_shift_subtitle_entries_applies_batch_offset(self):
+        entries = [(0.1, 0.9, '甲'), (1.0, 1.8, '乙')]
+
+        shifted = utility._shift_subtitle_entries(entries, 5.0)
+
+        self.assertEqual(shifted, [
+            (5.1, 5.9, '甲'),
+            (6.0, 6.8, '乙'),
+        ])
+
+    def test_map_alignment_rejects_partial_match(self):
+        sentences = [
+            utility.SentenceSpec('这是完整句子。', '这是完整句子', '这是完整句子', 6),
+        ]
+        units = [
+            {'text': '这是', 'start': 0.0, 'end': 0.5},
+        ]
+
+        with self.assertRaises(utility.AlignmentError):
+            utility._map_alignment_to_sentences(sentences, units)
+
+    def test_map_alignment_rejects_sentence_mismatch_without_cascading(self):
+        sentences = [
+            utility.SentenceSpec('甲乙。', '甲乙。', '甲乙', 2),
+            utility.SentenceSpec('甲丙。', '甲丙。', '甲丙', 2),
+        ]
+        units = [
+            {'text': '甲', 'start': 0.0, 'end': 0.2},
+            {'text': '丙', 'start': 0.2, 'end': 0.4},
+            {'text': '甲丙', 'start': 0.4, 'end': 0.8},
+        ]
+
+        with self.assertRaises(utility.AlignmentError):
+            utility._map_alignment_to_sentences(sentences, units)
+
+    def test_synthesize_sentence_group_falls_back_to_smaller_groups(self):
+        sentences = [
+            utility.SentenceSpec('甲。', '甲。', '甲', 1),
+            utility.SentenceSpec('乙。', '乙。', '乙', 1),
+        ]
+
+        class SplitFakeTts:
+            sample_rate = 1000
+
+            def inference_zero_shot(self, text, *args, **kwargs):
+                if text == '甲。乙。':
+                    yield {'tts_speech': FakeTensor(2000)}
+                elif text == '甲。':
+                    yield {'tts_speech': FakeTensor(1000)}
+                elif text == '乙。':
+                    yield {'tts_speech': FakeTensor(1000)}
+                else:
+                    raise AssertionError(text)
+
+        call_log = []
+
+        def fake_align(sent_group, wav_path):
+            key = ''.join(sentence.raw_sentence for sentence in sent_group)
+            call_log.append(key)
+            if key == '甲。乙。':
+                raise utility.AlignmentError('batch failed')
+            if key == '甲。':
+                return [(0.0, 1.0, '甲')]
+            if key == '乙。':
+                return [(0.0, 1.0, '乙')]
+            raise AssertionError(key)
+
+        with patch.object(utility, '_align_sentences_with_audio', side_effect=fake_align):
+            with patch.object(utility, '_write_alignment_temp_wav', return_value=Path('/tmp/fake.wav')):
+                tensor, entries = utility._synthesize_sentence_group(
+                    cosyvoice=SplitFakeTts(),
+                    sentences=sentences,
+                    sample_rate=1000,
+                    generate_subtitles=True,
+                    torch_module=FakeTorch,
+                )
+
+        self.assertEqual(tensor.shape[-1], 2000)
+        self.assertEqual(entries, [
+            (0.0, 1.0, '甲'),
+            (1.0, 2.0, '乙'),
+        ])
+        self.assertEqual(call_log, ['甲。乙。', '甲。', '乙。'])
+
+    def test_check_export_file_exists_requires_subtitle_when_requested(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_stem = Path(temp_dir) / 'chapter'
+            wav_path = output_stem.parent / 'chapter-1.wav'
+            wav_path.write_bytes(b'wav')
+
+            should_export = utility.check_export_file_exists(
+                str(output_stem),
+                1,
+                require_subtitles=True,
+            )
+
+        self.assertTrue(should_export)
 
     def test_construct_text_and_name_preserves_current_chapter_parsing(self):
         raw_data = '\n'.join([

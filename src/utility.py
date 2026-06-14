@@ -2,6 +2,7 @@ import os
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
 from typing import List, Dict
+from dataclasses import dataclass
 import sys
 import subprocess as _subprocess
 import argparse
@@ -9,6 +10,7 @@ import time
 import logging
 import json
 import shutil
+import tempfile
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn, MofNCompleteColumn
@@ -48,6 +50,31 @@ _pinyin = None
 _style_tone = None
 _to_initials = None
 _to_finals_tone = None
+_stable_aligner = None
+
+
+@dataclass
+class SentenceSpec:
+    raw_sentence: str
+    tts_sentence: str
+    sub_sentence: str
+    word_count: int
+
+
+@dataclass
+class BatchSpec:
+    sentences: List[SentenceSpec]
+    tts_text: str
+
+
+@dataclass
+class ClipSpec:
+    index: int
+    sentences: List[SentenceSpec]
+
+
+class AlignmentError(RuntimeError):
+    pass
 
 
 def _decode_subprocess_output(data):
@@ -105,6 +132,25 @@ def get_tts():
                 f"原始错误: {e}"
             ) from e
     return _tts
+
+
+def get_stable_aligner():
+    global _stable_aligner
+    if _stable_aligner is None:
+        try:
+            import stable_whisper
+            _stable_aligner = stable_whisper.load_model('base')
+        except Exception as e:
+            raise RuntimeError(
+                "无法加载 stable-ts 对齐模型。请先安装 stable-ts，并确认 whisper 相关依赖可用。"
+                f" 原始错误: {e}"
+            ) from e
+    return _stable_aligner
+
+
+def _normalize_alignment_text(text: str) -> str:
+    normalized = re.sub(r'\s+', '', mask_punctuations(text))
+    return re.sub(r'[^一-鿿0-9a-zA-Z]+', '', normalized)
 
 book_delimiter = config['text_processing']['book_delimiter']
 SUPPORTED_INPUT_SUFFIXES = {'.txt', '.epub', '.mobi'}
@@ -213,7 +259,7 @@ def convert_wav_to_mp3(wav_path, bitrate='128k'):
         raise RuntimeError(_subprocess_failure_message('MP3 conversion failed', ret.returncode, stderr))
 
 
-def check_export_file_exists(output_path, video_clip_index):
+def check_export_file_exists(output_path, video_clip_index, require_subtitles=False):
     """返回 True 表示需要导出（文件不存在），用于断点续生成。
     自动清理中断留下的临时文件和空文件。"""
     output_stem = Path(output_path)
@@ -224,6 +270,11 @@ def check_export_file_exists(output_path, video_clip_index):
             os.remove(tmp)
             logger.debug(f"Removed incomplete temp file: {tmp}")
     # 检查已完成的文件
+    subtitle_path = build_clip_output_path(output_stem, video_clip_index, '.srt')
+    if require_subtitles and subtitle_path.is_file() and subtitle_path.stat().st_size == 0:
+        os.remove(subtitle_path)
+        logger.debug(f"Removed empty file: {subtitle_path}")
+
     for ext in ('.mp4', '.mp3', '.wav'):
         path = build_clip_output_path(output_stem, video_clip_index, ext)
         if path.is_file():
@@ -231,6 +282,9 @@ def check_export_file_exists(output_path, video_clip_index):
                 os.remove(path)
                 logger.debug(f"Removed empty file: {path}")
                 continue
+            if require_subtitles and ext in ('.mp3', '.wav') and not subtitle_path.is_file():
+                logger.debug(f"{path} exists but subtitle is missing; clip will be regenerated.")
+                return True
             logger.debug(f"{path} is already generated !")
             return False
     return True
@@ -238,7 +292,7 @@ def check_export_file_exists(output_path, video_clip_index):
 
 def generate_audio_clip(text: str, output_path: str, sample_rate=None, generate_subtitles: bool = True):
     """将一章文本转为音频，按 MAX_CHARS_PER_CLIP 切分为多个片段（-1 则不分片）。
-    同时收集句级时间戳，生成 SRT 字幕文件。"""
+    字幕模式下使用 clip 内小批量 TTS + 对齐器回贴句级时间。"""
     torch_module, _ = _load_torch_modules()
     from subtitle import save_subtitle_file
 
@@ -246,59 +300,250 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=None, generate_
     if sample_rate is None:
         sample_rate = cosyvoice.sample_rate
 
-    word_count = 0
-    video_clip_index = 1
     exported_clip_indices = []
-    wav_chunks = []
-    subtitle_entries = []
-    current_time = 0.0
-    export = check_export_file_exists(output_path=output_path, video_clip_index=video_clip_index)
+    sentence_specs = _build_sentence_specs(text)
+    clip_specs = _build_clip_specs(sentence_specs)
 
-    silence = None
-    if INTER_SENTENCE_SILENCE_MS > 0:
-        silence = torch_module.zeros(1, int(sample_rate * INTER_SENTENCE_SILENCE_MS / 1000))
+    for clip in clip_specs:
+        export = check_export_file_exists(
+            output_path=output_path,
+            video_clip_index=clip.index,
+            require_subtitles=generate_subtitles,
+        )
+        if not export:
+            continue
 
-    # 在句尾标点处拆分为独立句子，确保每个句子有精确的时间戳
+        batch_specs = _build_batch_specs(clip.sentences)
+        batch_tensors = []
+        subtitle_entries = []
+        clip_offset_seconds = 0.0
+        for batch in batch_specs:
+            batch_tensor, batch_entries = _synthesize_sentence_group(
+                cosyvoice=cosyvoice,
+                sentences=batch.sentences,
+                sample_rate=sample_rate,
+                generate_subtitles=generate_subtitles,
+                torch_module=torch_module,
+            )
+            if batch_tensor is None:
+                continue
+            batch_tensors.append(batch_tensor)
+
+            if generate_subtitles:
+                subtitle_entries.extend(_shift_subtitle_entries(batch_entries, clip_offset_seconds))
+
+            clip_offset_seconds += batch_tensor.shape[-1] / sample_rate
+
+        combined = torch_module.cat(batch_tensors, dim=-1) if batch_tensors else None
+        save_audio_file(combined, sample_rate, output_path, clip.index, exported_clip_indices)
+        if generate_subtitles and subtitle_entries:
+            save_subtitle_file(subtitle_entries, output_path, clip.index)
+    return exported_clip_indices
+
+
+def _build_sentence_specs(text: str) -> List[SentenceSpec]:
     raw_sentences = [s.strip() for s in re.split(r'(?<=[。！？])', text) if s.strip()]
-
+    sentence_specs = []
     for raw_sentence in raw_sentences:
         tts_sentence = mask_punctuations(text=annotate_polyphones(raw_sentence))
         sub_sentence = mask_punctuations(text=raw_sentence).rstrip('。')
         if not tts_sentence or not sub_sentence:
             continue
+        sentence_specs.append(SentenceSpec(
+            raw_sentence=raw_sentence,
+            tts_sentence=tts_sentence,
+            sub_sentence=sub_sentence,
+            word_count=get_word_num(text=raw_sentence),
+        ))
+    return sentence_specs
 
-        if export:
-            sentence_start = current_time
-            if silence is not None and wav_chunks:
-                wav_chunks.append(silence)
-                current_time += INTER_SENTENCE_SILENCE_MS / 1000
-                sentence_start = current_time
-            for chunk in cosyvoice.inference_zero_shot(
-                tts_sentence, PROMPT_TEXT, SPEAKER_WAV,
-                zero_shot_spk_id='narrator', stream=False, speed=SPEED
-            ):
-                wav_chunks.append(chunk['tts_speech'])
-                current_time += chunk['tts_speech'].shape[-1] / sample_rate
-            subtitle_entries.append((sentence_start, current_time, sub_sentence))
-        word_count += get_word_num(text=raw_sentence)
 
-        if MAX_CHARS_PER_CLIP > 0 and word_count > MAX_CHARS_PER_CLIP:
-            combined = torch_module.cat(wav_chunks, dim=-1) if wav_chunks else None
-            save_audio_file(combined, sample_rate, output_path, video_clip_index, exported_clip_indices)
-            if generate_subtitles and export and subtitle_entries:
-                save_subtitle_file(subtitle_entries, output_path, video_clip_index)
-            video_clip_index += 1
-            wav_chunks = []
-            word_count = 0
-            subtitle_entries = []
-            current_time = 0.0
-            export = check_export_file_exists(output_path=output_path, video_clip_index=video_clip_index)
+def _build_clip_specs(sentence_specs: List[SentenceSpec]) -> List[ClipSpec]:
+    if MAX_CHARS_PER_CLIP <= 0:
+        return [ClipSpec(index=1, sentences=list(sentence_specs))] if sentence_specs else []
 
-    combined = torch_module.cat(wav_chunks, dim=-1) if wav_chunks else None
-    save_audio_file(combined, sample_rate, output_path, video_clip_index, exported_clip_indices)
-    if generate_subtitles and export and subtitle_entries:
-        save_subtitle_file(subtitle_entries, output_path, video_clip_index)
-    return exported_clip_indices
+    clips = []
+    current_sentences = []
+    current_words = 0
+    clip_index = 1
+    for sentence in sentence_specs:
+        if current_sentences and current_words + sentence.word_count > MAX_CHARS_PER_CLIP:
+            clips.append(ClipSpec(index=clip_index, sentences=current_sentences))
+            clip_index += 1
+            current_sentences = []
+            current_words = 0
+        current_sentences.append(sentence)
+        current_words += sentence.word_count
+    if current_sentences:
+        clips.append(ClipSpec(index=clip_index, sentences=current_sentences))
+    return clips
+
+
+def _build_batch_specs(sentences: List[SentenceSpec]) -> List[BatchSpec]:
+    batches = []
+    idx = 0
+    while idx < len(sentences):
+        current = [sentences[idx]]
+        current_len = len(sentences[idx].tts_sentence)
+        idx += 1
+        if current_len >= 40:
+            batches.append(BatchSpec(sentences=current, tts_text=''.join(s.tts_sentence for s in current)))
+            continue
+        while idx < len(sentences):
+            next_sentence = sentences[idx]
+            next_len = len(next_sentence.tts_sentence)
+            if len(current) >= 4:
+                break
+            if current_len >= 60 and current_len + next_len > 90:
+                break
+            current.append(next_sentence)
+            current_len += next_len
+            idx += 1
+        batches.append(BatchSpec(sentences=current, tts_text=''.join(s.tts_sentence for s in current)))
+    return batches
+
+
+def _synthesize_sentence_group(cosyvoice, sentences: List[SentenceSpec], sample_rate: int, generate_subtitles: bool, torch_module):
+    tts_text = ''.join(sentence.tts_sentence for sentence in sentences)
+    batch_chunks = []
+    for chunk in cosyvoice.inference_zero_shot(
+        tts_text, PROMPT_TEXT, SPEAKER_WAV,
+        zero_shot_spk_id='narrator', stream=False, speed=SPEED
+    ):
+        batch_chunks.append(chunk['tts_speech'])
+
+    batch_tensor = torch_module.cat(batch_chunks, dim=-1) if batch_chunks else None
+    if batch_tensor is None or not generate_subtitles:
+        return batch_tensor, []
+
+    try:
+        entries = _align_tensor_subtitles(sentences, batch_tensor, sample_rate)
+        return batch_tensor, entries
+    except AlignmentError as exc:
+        if len(sentences) == 1:
+            raise RuntimeError(
+                f"字幕对齐失败，且无法继续切分。句子: {sentences[0].raw_sentence[:50]}"
+            ) from exc
+        split_index = len(sentences) // 2
+        logger.warning(
+            "Batch alignment failed for %s sentences; retrying smaller groups.",
+            len(sentences),
+        )
+        left_tensor, left_entries = _synthesize_sentence_group(
+            cosyvoice=cosyvoice,
+            sentences=sentences[:split_index],
+            sample_rate=sample_rate,
+            generate_subtitles=generate_subtitles,
+            torch_module=torch_module,
+        )
+        right_tensor, right_entries = _synthesize_sentence_group(
+            cosyvoice=cosyvoice,
+            sentences=sentences[split_index:],
+            sample_rate=sample_rate,
+            generate_subtitles=generate_subtitles,
+            torch_module=torch_module,
+        )
+
+        tensors = [tensor for tensor in (left_tensor, right_tensor) if tensor is not None]
+        combined_tensor = torch_module.cat(tensors, dim=-1) if tensors else None
+        right_offset = left_tensor.shape[-1] / sample_rate if left_tensor is not None else 0.0
+        return combined_tensor, left_entries + _shift_subtitle_entries(right_entries, right_offset)
+
+
+def _align_tensor_subtitles(sentences: List[SentenceSpec], wav_tensor, sample_rate: int):
+    wav_path = None
+    try:
+        wav_path = _write_alignment_temp_wav(wav_tensor, sample_rate)
+        return _align_sentences_with_audio(sentences, wav_path)
+    finally:
+        if wav_path and wav_path.exists():
+            wav_path.unlink()
+
+
+def _write_alignment_temp_wav(wav_tensor, sample_rate: int) -> Path:
+    _, torchaudio_module = _load_torch_modules()
+    with tempfile.NamedTemporaryFile(prefix='txt2audio-align-', suffix='.wav', delete=False) as tmp_file:
+        temp_path = Path(tmp_file.name)
+    save_tensor = wav_tensor.unsqueeze(0) if wav_tensor.dim() == 1 else wav_tensor
+    torchaudio_module.save(str(temp_path), save_tensor, sample_rate)
+    return temp_path
+
+
+def _align_sentences_with_audio(sentences: List[SentenceSpec], wav_path: Path):
+    aligner = get_stable_aligner()
+    align_text = ''.join(_normalize_alignment_text(sentence.raw_sentence) for sentence in sentences)
+    if not align_text:
+        return []
+    result = aligner.align(str(wav_path), align_text, language='zh', regroup=False)
+    word_segments = _extract_alignment_units(result)
+    return _map_alignment_to_sentences(sentences, word_segments)
+
+
+def _shift_subtitle_entries(entries, offset_seconds: float):
+    if offset_seconds == 0:
+        return entries
+    return [
+        (start + offset_seconds, end + offset_seconds, text)
+        for start, end, text in entries
+    ]
+
+
+def _extract_alignment_units(result):
+    units = []
+    segments = getattr(result, 'segments', None) or result.get('segments', [])
+    for segment in segments:
+        words = getattr(segment, 'words', None) or segment.get('words', [])
+        for word in words:
+            text = getattr(word, 'word', None) or word.get('word', '')
+            start = getattr(word, 'start', None)
+            end = getattr(word, 'end', None)
+            if start is None or end is None or not text:
+                continue
+            units.append({
+                'text': re.sub(r'\s+', '', text),
+                'start': float(start),
+                'end': float(end),
+            })
+    return units
+
+
+def _map_alignment_to_sentences(sentences: List[SentenceSpec], units):
+    if not units:
+        raise AlignmentError('No alignment units returned')
+
+    entries = []
+    unit_index = 0
+    for sentence in sentences:
+        target = _normalize_alignment_text(sentence.raw_sentence)
+        if not target:
+            continue
+        start = None
+        end = None
+        matched = ''
+        while unit_index < len(units):
+            unit = units[unit_index]
+            text = unit['text']
+            if not text:
+                unit_index += 1
+                continue
+            remaining = target[len(matched):]
+            if remaining and not remaining.startswith(text):
+                raise AlignmentError(
+                    f"Alignment mismatch for sentence: expected {remaining[:20]!r}, got {text!r}"
+                )
+            if start is None:
+                start = unit['start']
+            end = unit['end']
+            matched += text
+            unit_index += 1
+            if len(matched) >= len(target):
+                break
+        if matched != target or start is None or end is None:
+            raise AlignmentError(
+                f"Incomplete alignment for sentence: matched {len(matched)}/{len(target)} chars"
+            )
+        entries.append((start, end, sentence.sub_sentence))
+    return entries
 
 
 def mask_punctuations(text):

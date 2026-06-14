@@ -25,6 +25,7 @@ dependencies = [
     "inflect>=7.3.1",
     "omegaconf==2.3.0",
     "openai-whisper>=20231117",
+    "stable-ts>=2.19.1",
     "protobuf>=4.25",
     "pydantic>=2.7.0",
     "soundfile>=0.12.1",
