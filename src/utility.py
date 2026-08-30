@@ -1,5 +1,8 @@
 import os
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+# Keep Intel OpenMP's stable-ts deprecation notice out of normal CLI output.
+_original_kmp_warnings = os.environ.get('KMP_WARNINGS')
+os.environ.setdefault('KMP_WARNINGS', '0')
 
 from typing import List, Dict
 from dataclasses import dataclass
@@ -11,6 +14,7 @@ import logging
 import json
 import shutil
 import tempfile
+import warnings
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn, MofNCompleteColumn
@@ -51,6 +55,104 @@ _style_tone = None
 _to_initials = None
 _to_finals_tone = None
 _stable_aligner = None
+_dependency_progress_verbose = False
+_dependency_log_level = logging.WARNING
+_quiet_tqdm_class = None
+_original_tqdm_class = None
+
+
+_NOISY_LOG_MARKERS = (
+    'Sliding Window Attention is enabled but not implemented',
+    'too short than prompt text',
+)
+
+
+class _DependencyLogFilter(logging.Filter):
+    """Drop known dependency chatter while retaining actionable warnings."""
+
+    def filter(self, record):
+        message = record.getMessage()
+        return not any(marker in message for marker in _NOISY_LOG_MARKERS)
+
+
+def _replace_loaded_tqdm_symbols(replacement):
+    """Keep already-imported libraries on the same progress policy."""
+    sentinel = object()
+    for module in tuple(sys.modules.values()):
+        if module is None:
+            continue
+        current = getattr(module, 'tqdm', sentinel)
+        if current is _original_tqdm_class or current is _quiet_tqdm_class:
+            module.tqdm = replacement
+
+
+def _configure_runtime_output(*, verbose=False):
+    """Apply the CLI output policy before lazy TTS/alignment imports."""
+    global _dependency_progress_verbose, _quiet_tqdm_class, _original_tqdm_class
+
+    _dependency_progress_verbose = bool(verbose)
+    try:
+        import tqdm as tqdm_module
+    except ImportError:
+        return
+
+    if verbose:
+        if _original_kmp_warnings is None:
+            os.environ['KMP_WARNINGS'] = '1'
+        if _original_tqdm_class is not None:
+            tqdm_module.tqdm = _original_tqdm_class
+            _replace_loaded_tqdm_symbols(_original_tqdm_class)
+        return
+
+    # CosyVoice imports ``tqdm`` by symbol, so patch the package before the
+    # vendored module is loaded. A subclass keeps tqdm's public API intact.
+    if _original_tqdm_class is None:
+        _original_tqdm_class = tqdm_module.tqdm
+
+        class QuietTqdm(_original_tqdm_class):
+            def __init__(self, *args, **kwargs):
+                if not _dependency_progress_verbose:
+                    kwargs['disable'] = True
+                super().__init__(*args, **kwargs)
+
+        _quiet_tqdm_class = QuietTqdm
+
+    tqdm_module.tqdm = _quiet_tqdm_class
+    _replace_loaded_tqdm_symbols(_quiet_tqdm_class)
+
+
+def _configure_runtime_warnings(*, verbose=False):
+    if verbose:
+        return
+    warnings.filterwarnings(
+        'ignore',
+        message=r'torch\.nn\.utils\.weight_norm is deprecated.*',
+        category=UserWarning,
+        module=r'torch\.nn\.utils\.weight_norm',
+    )
+    warnings.filterwarnings(
+        'ignore',
+        message=r'pkg_resources is deprecated as an API\..*',
+        category=UserWarning,
+        module=r'pyworld',
+    )
+
+
+def _configure_transformers_logging():
+    """Route Hugging Face's private handler through the CLI log policy."""
+    try:
+        from transformers.utils import logging as transformers_logging
+    except ImportError:
+        return
+
+    if _dependency_progress_verbose:
+        transformers_logging.set_verbosity_info()
+    elif _dependency_log_level >= logging.ERROR:
+        transformers_logging.set_verbosity_error()
+    else:
+        transformers_logging.set_verbosity_warning()
+    transformers_logging.disable_default_handler()
+    transformers_logging.enable_propagation()
 
 
 @dataclass
@@ -120,6 +222,7 @@ def get_tts():
     global _tts
     if _tts is None:
         try:
+            _configure_transformers_logging()
             from cosyvoice.cli.cosyvoice import AutoModel
             _tts = AutoModel(model_dir=MODEL_DIR)
             _tts.add_zero_shot_spk(PROMPT_TEXT, SPEAKER_WAV, 'narrator')
@@ -474,7 +577,15 @@ def _align_sentences_with_audio(sentences: List[SentenceSpec], wav_path: Path):
     align_text = ''.join(_normalize_alignment_text(sentence.raw_sentence) for sentence in sentences)
     if not align_text:
         return []
-    result = aligner.align(str(wav_path), align_text, language='zh', regroup=False)
+    # stable-ts uses ``verbose=False`` to mean "show a progress bar" and
+    # ``None`` to mean silent; map that convention to the CLI policy.
+    result = aligner.align(
+        str(wav_path),
+        align_text,
+        language='zh',
+        regroup=False,
+        verbose=False if _dependency_progress_verbose else None,
+    )
     word_segments = _extract_alignment_units(result)
     return _map_alignment_to_sentences(sentences, word_segments)
 
@@ -920,7 +1031,7 @@ def _should_show_resume_hint(args):
 
 
 def _should_show_chapter_progress(args, chapter_indices):
-    return not args.json and not args.quiet and len(chapter_indices) > 1
+    return not args.json and not args.quiet and bool(chapter_indices)
 
 
 def _should_print_summary(args, conversion_failures):
@@ -1049,13 +1160,23 @@ def _build_chapter_manifest(
 def cli_main_process():
     args = parse_arguments()
 
+    verbose_output = bool(getattr(args, 'verbose', False)) and not args.quiet
+    _configure_runtime_output(verbose=verbose_output)
+    _configure_runtime_warnings(verbose=verbose_output)
+
     # logging 仅用于库级代码（video.py 等）的 warning/error
     from rich.logging import RichHandler
+    log_level = logging.INFO if verbose_output else (logging.ERROR if args.quiet else logging.WARNING)
+    global _dependency_log_level
+    _dependency_log_level = log_level
     if args.json:
-        logging.basicConfig(level=logging.WARNING, stream=sys.stderr, format='%(message)s')
+        log_handler = logging.StreamHandler(sys.stderr)
+        log_handler.setFormatter(logging.Formatter('%(message)s'))
     else:
-        logging.basicConfig(level=logging.WARNING,
-                            handlers=[RichHandler(console=console, show_time=False, show_path=False)])
+        log_handler = RichHandler(console=console, show_time=False, show_path=False)
+    if not verbose_output:
+        log_handler.addFilter(_DependencyLogFilter())
+    logging.basicConfig(level=log_level, handlers=[log_handler], force=True)
 
     # 应用 CLI 配置覆盖
     _apply_config_overrides(args)
@@ -1527,6 +1648,8 @@ def parse_arguments():
                         help='output result as JSON to stdout (machine-readable)')
     parser.add_argument('--quiet', '-q', action='store_true',
                         help='suppress progress output, only show errors')
+    parser.add_argument('--verbose', action='store_true',
+                        help='show model and dependency diagnostics')
     parser.add_argument('--speed', type=float, default=None,
                         help='TTS speed override (e.g. 0.95)')
     parser.add_argument('--output-format', type=str, choices=['mp3', 'wav'], default=None,

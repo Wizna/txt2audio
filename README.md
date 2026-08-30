@@ -77,6 +77,7 @@ uv run txt2audio book.txt --range all --quiet
 ```
 
 - `--json`：最终结果写到 stdout
+- 默认仅显示书名、章节级进度和最终摘要；`--verbose` 可恢复模型/依赖层诊断输出
 - `--events-jsonl PATH`：进度事件写到 JSONL；传 `-` 时写到 stderr
 - `schemas/`：包含运行结果、计划结果、路径校验、事件流、错误 envelope、章节清单的 schema
 - 退出码：`0` 成功，`1` 失败

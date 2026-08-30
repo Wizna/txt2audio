@@ -2,6 +2,7 @@ import tempfile
 import unittest
 import io
 import json
+import logging
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -314,6 +315,7 @@ class UtilityTests(unittest.TestCase):
         self.assertEqual(aligner.calls[0]['text'], '你好世界')
         self.assertEqual(aligner.calls[0]['kwargs']['language'], 'zh')
         self.assertFalse(aligner.calls[0]['kwargs']['regroup'])
+        self.assertIsNone(aligner.calls[0]['kwargs']['verbose'])
 
     def test_shift_subtitle_entries_applies_batch_offset(self):
         entries = [(0.1, 0.9, '甲'), (1.0, 1.8, '乙')]
@@ -642,10 +644,23 @@ class UtilityTests(unittest.TestCase):
         self.assertTrue(utility._should_show_catalog(interactive))
         self.assertFalse(utility._should_show_catalog(explicit_range))
         self.assertFalse(utility._should_show_catalog(quiet))
-        self.assertFalse(utility._should_show_chapter_progress(explicit_range, [0]))
+        self.assertTrue(utility._should_show_chapter_progress(explicit_range, [0]))
         self.assertTrue(utility._should_show_chapter_progress(explicit_range, [0, 1]))
         self.assertFalse(utility._should_print_summary(quiet, []))
         self.assertTrue(utility._should_print_summary(quiet, [{'message': 'failed'}]))
+
+    def test_dependency_log_filter_keeps_actionable_warnings(self):
+        noisy = logging.LogRecord(
+            'transformers.models.qwen2.modeling_qwen2', logging.WARNING,
+            '', 0, 'Sliding Window Attention is enabled but not implemented for `sdpa`', (), None,
+        )
+        actionable = logging.LogRecord(
+            'txt2audio', logging.WARNING, '', 0, '字幕对齐失败，将重试更小批次。', (), None,
+        )
+
+        log_filter = utility._DependencyLogFilter()
+        self.assertFalse(log_filter.filter(noisy))
+        self.assertTrue(log_filter.filter(actionable))
 
     def test_subprocess_failure_message_uses_last_stderr_line(self):
         message = utility._subprocess_failure_message(
