@@ -362,9 +362,11 @@ def convert_wav_to_mp3(wav_path, bitrate='128k'):
         raise RuntimeError(_subprocess_failure_message('MP3 conversion failed', ret.returncode, stderr))
 
 
-def check_export_file_exists(output_path, video_clip_index, require_subtitles=False):
-    """返回 True 表示需要导出（文件不存在），用于断点续生成。
-    自动清理中断留下的临时文件和空文件。"""
+def check_export_file_exists(output_path, video_clip_index, require_subtitles=False, target_format=None):
+    """返回 True 表示需要导出，用于断点续生成。
+
+    纯音频模式只把目标格式视为最终产物；MP3 可以复用已有 WAV 作为待转换
+    中间文件，视频模式则可以复用已有 MP3/WAV。"""
     output_stem = Path(output_path)
     # 清理中断留下的临时文件
     for ext in ('.wav', '.mp3', '.mp4', '.srt'):
@@ -378,7 +380,16 @@ def check_export_file_exists(output_path, video_clip_index, require_subtitles=Fa
         os.remove(subtitle_path)
         logger.debug(f"Removed empty file: {subtitle_path}")
 
-    for ext in ('.mp4', '.mp3', '.wav'):
+    if target_format == 'mp4':
+        candidate_exts = ('.mp4', '.wav', '.mp3')
+    elif target_format == 'mp3':
+        candidate_exts = ('.mp3', '.wav')
+    elif target_format == 'wav':
+        candidate_exts = ('.wav',)
+    else:
+        candidate_exts = ('.mp4', '.mp3', '.wav')
+
+    for ext in candidate_exts:
         path = build_clip_output_path(output_stem, video_clip_index, ext)
         if path.is_file():
             if path.stat().st_size == 0:
@@ -393,7 +404,13 @@ def check_export_file_exists(output_path, video_clip_index, require_subtitles=Fa
     return True
 
 
-def generate_audio_clip(text: str, output_path: str, sample_rate=None, generate_subtitles: bool = True):
+def generate_audio_clip(
+    text: str,
+    output_path: str,
+    sample_rate=None,
+    generate_subtitles: bool = True,
+    target_format: str | None = None,
+):
     """将一章文本转为音频，按 MAX_CHARS_PER_CLIP 切分为多个片段（-1 则不分片）。
     字幕模式下使用 clip 内小批量 TTS + 对齐器回贴句级时间。"""
     torch_module, _ = _load_torch_modules()
@@ -412,6 +429,7 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=None, generate_
             output_path=output_path,
             video_clip_index=clip.index,
             require_subtitles=generate_subtitles,
+            target_format=target_format,
         )
         if not export:
             continue
@@ -430,11 +448,22 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=None, generate_
             )
             if batch_tensor is None:
                 continue
-            batch_tensors.append(batch_tensor)
+
+            if generate_subtitles:
+                batch_tensor, batch_entries = _insert_sentence_silence(
+                    batch_tensor, batch_entries, sample_rate, torch_module,
+                )
+
+            if batch_tensors and INTER_SENTENCE_SILENCE_MS > 0:
+                silence = _silence_tensor_like(batch_tensor, sample_rate, torch_module)
+                if silence is not None:
+                    batch_tensors.append(silence)
+                    clip_offset_seconds += INTER_SENTENCE_SILENCE_MS / 1000
 
             if generate_subtitles:
                 subtitle_entries.extend(_shift_subtitle_entries(batch_entries, clip_offset_seconds))
 
+            batch_tensors.append(batch_tensor)
             clip_offset_seconds += batch_tensor.shape[-1] / sample_rate
 
         combined = torch_module.cat(batch_tensors, dim=-1) if batch_tensors else None
@@ -442,6 +471,52 @@ def generate_audio_clip(text: str, output_path: str, sample_rate=None, generate_
         if generate_subtitles and subtitle_entries:
             save_subtitle_file(subtitle_entries, output_path, clip.index)
     return exported_clip_indices
+
+
+def _silence_tensor_like(reference, sample_rate: int, torch_module):
+    silence_samples = int(round(sample_rate * INTER_SENTENCE_SILENCE_MS / 1000))
+    if silence_samples <= 0:
+        return None
+    shape = tuple(reference.shape[:-1]) + (silence_samples,)
+    kwargs = {}
+    for name in ('dtype', 'device'):
+        if hasattr(reference, name):
+            kwargs[name] = getattr(reference, name)
+    try:
+        return torch_module.zeros(*shape, **kwargs)
+    except TypeError:
+        # Lightweight test doubles and older torch wrappers may not accept dtype/device.
+        return torch_module.zeros(*shape)
+
+
+def _insert_sentence_silence(batch_tensor, entries, sample_rate: int, torch_module):
+    """在对齐后的句子之间插入配置的静音，并同步调整字幕时间。"""
+    if batch_tensor is None or len(entries) < 2 or INTER_SENTENCE_SILENCE_MS <= 0:
+        return batch_tensor, entries
+
+    silence = _silence_tensor_like(batch_tensor, sample_rate, torch_module)
+    if silence is None:
+        return batch_tensor, entries
+
+    total_samples = batch_tensor.shape[-1]
+    cursor = 0
+    offset = 0.0
+    gap_seconds = INTER_SENTENCE_SILENCE_MS / 1000
+    chunks = []
+    shifted_entries = []
+    for index, (start, end, text) in enumerate(entries):
+        if index < len(entries) - 1:
+            end_sample = min(total_samples, max(cursor, int(round(end * sample_rate))))
+            chunks.append(batch_tensor[..., cursor:end_sample])
+            chunks.append(silence)
+            cursor = end_sample
+            shifted_entries.append((start + offset, end + offset, text))
+            offset += gap_seconds
+        else:
+            chunks.append(batch_tensor[..., cursor:])
+            shifted_entries.append((start + offset, end + offset, text))
+
+    return torch_module.cat(chunks, dim=-1), shifted_entries
 
 
 def _build_sentence_specs(text: str) -> List[SentenceSpec]:
@@ -507,6 +582,30 @@ def _build_batch_specs(sentences: List[SentenceSpec]) -> List[BatchSpec]:
 
 
 def _synthesize_sentence_group(cosyvoice, sentences: List[SentenceSpec], sample_rate: int, generate_subtitles: bool, torch_module):
+    if not generate_subtitles and INTER_SENTENCE_SILENCE_MS > 0 and len(sentences) > 1:
+        sentence_tensors = []
+        for sentence in sentences:
+            sentence_chunks = [
+                chunk['tts_speech']
+                for chunk in cosyvoice.inference_zero_shot(
+                    sentence.tts_sentence,
+                    PROMPT_TEXT,
+                    SPEAKER_WAV,
+                    zero_shot_spk_id='narrator',
+                    stream=False,
+                    speed=SPEED,
+                )
+            ]
+            sentence_tensor = torch_module.cat(sentence_chunks, dim=-1) if sentence_chunks else None
+            if sentence_tensor is None:
+                continue
+            if sentence_tensors:
+                silence = _silence_tensor_like(sentence_tensor, sample_rate, torch_module)
+                if silence is not None:
+                    sentence_tensors.append(silence)
+            sentence_tensors.append(sentence_tensor)
+        return (torch_module.cat(sentence_tensors, dim=-1) if sentence_tensors else None), []
+
     tts_text = ''.join(sentence.tts_sentence for sentence in sentences)
     batch_chunks = []
     for chunk in cosyvoice.inference_zero_shot(
@@ -817,7 +916,7 @@ def get_delimiter_pattern(delimiter):
     return rf"(^|\s)(第[零一二三四五六七八九十]+{delimiter}|{delimiter}[零一二三四五六七八九十]+)($|\s)"
 
 
-def construct_text_and_name(raw_data, book_name: str):
+def construct_text_and_name(raw_data, book_name: str, write_toc: bool = True):
     table_of_contents = {}
     output_targets = {}
     contents_of_chapter = {}
@@ -890,8 +989,9 @@ def construct_text_and_name(raw_data, book_name: str):
             contents_of_chapter[toc_index] = contents
             toc_index += 1
 
-    toc_file_path = _book_output_dir(book_name) / '目录.txt'
-    save_table_of_contents(file_path=toc_file_path, table_of_contents=table_of_contents)
+    if write_toc and table_of_contents:
+        toc_file_path = _book_output_dir(book_name) / '目录.txt'
+        save_table_of_contents(file_path=toc_file_path, table_of_contents=table_of_contents)
 
     return table_of_contents, output_targets, contents_of_chapter
 
@@ -1058,6 +1158,19 @@ def _existing_outputs(output_path: Path) -> list[dict]:
     return outputs
 
 
+def _collect_clip_indices(output_path: Path, clip_indices, suffix: str) -> list[int]:
+    """合并本次生成和磁盘上已有片段索引，用于断点转换。"""
+    collected = set(clip_indices)
+    index = 1
+    # 前一个片段可能已经转成 MP3/MP4 并删除 WAV，不能因此漏掉后续残留 WAV。
+    known_suffixes = ('.mp4', '.mp3', '.wav', '.srt')
+    while any(build_clip_output_path(output_path, index, ext).is_file() for ext in known_suffixes):
+        if build_clip_output_path(output_path, index, suffix).is_file():
+            collected.add(index)
+        index += 1
+    return sorted(collected)
+
+
 def _artifact_record(path, *, chapter_index, clip_index, role):
     artifact_path = Path(path)
     return {
@@ -1222,7 +1335,11 @@ def cli_main_process():
         status = '已生成' if generated_txt else '复用'
         console.print(f"  [dim]{status} 文本: {source_text_path}[/dim]")
 
-    toc, output_targets, contents = construct_text_and_name(raw_data=raw_data, book_name=book_name)
+    toc, output_targets, contents = construct_text_and_name(
+        raw_data=raw_data,
+        book_name=book_name,
+        write_toc=not (args.validate_paths or args.plan_json),
+    )
     book_output_dir = _book_output_dir(book_name)
 
     if not toc:
@@ -1352,6 +1469,7 @@ def cli_main_process():
                         text=''.join(contents[idx]),
                         output_path=str(output_path),
                         generate_subtitles=generate_subtitles,
+                        target_format='mp4' if args.video else audio_format,
                     )
                 except RuntimeError as e:
                     if event_writer:
@@ -1394,7 +1512,7 @@ def cli_main_process():
                                     audio=str(wav_path),
                                     toc=toc[idx],
                                     resources_dir=RESOURCES_DIR,
-                                    keep_subtitles=args.keep_srt,
+                                    keep_subtitles=args.srt or args.keep_srt,
                                     warnings=video_warnings,
                                 )
                                 if event_writer:
@@ -1432,7 +1550,7 @@ def cli_main_process():
                                     audio=str(mp3_path),
                                     toc=toc[idx],
                                     resources_dir=RESOURCES_DIR,
-                                    keep_subtitles=args.keep_srt,
+                                    keep_subtitles=args.srt or args.keep_srt,
                                     warnings=video_warnings,
                                 )
                                 if event_writer:
@@ -1466,9 +1584,13 @@ def cli_main_process():
                             break
                         i += 1
                 elif audio_format == 'mp3':
-                    for i in clip_num:
+                    for i in _collect_clip_indices(output_path, clip_num, '.wav'):
                         wav_path = build_clip_output_path(output_path, i, '.wav')
                         mp3_path = build_clip_output_path(output_path, i, '.mp3')
+                        if mp3_path.is_file() and mp3_path.stat().st_size > 0:
+                            continue
+                        if not wav_path.is_file():
+                            continue
                         try:
                             output_file = convert_wav_to_mp3(wav_path, bitrate=mp3_bitrate)
                             generated_outputs.append(output_file)

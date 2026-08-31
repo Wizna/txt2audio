@@ -41,6 +41,14 @@ def split_subtitle_entries(entries):
                 segments[-1] += part
             else:
                 segments.append(part)
+        # Even text without clause punctuation must obey the configured limit.
+        bounded_segments = []
+        for segment in segments:
+            bounded_segments.extend(
+                segment[i:i + max_chars]
+                for i in range(0, len(segment), max_chars)
+            )
+        segments = bounded_segments
         total_chars = sum(len(s) for s in segments)
         duration = end - start
         t = start

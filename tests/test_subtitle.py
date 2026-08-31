@@ -23,6 +23,15 @@ class SubtitleTests(unittest.TestCase):
         self.assertAlmostEqual(result[-1][1], 4.0)
         self.assertTrue(all(text.strip('，；：') == text for _, _, text in result))
 
+    def test_split_subtitle_entries_bounds_unpunctuated_text(self):
+        original = '没有任何分隔标点但长度超过两行限制的字幕文本'
+        result = subtitle.split_subtitle_entries([(0.0, 4.0, original)])
+
+        self.assertGreater(len(result), 1)
+        self.assertEqual(''.join(text for _, _, text in result), original)
+        self.assertTrue(all(len(text) <= 20 for _, _, text in result))
+        self.assertAlmostEqual(result[-1][1], 4.0)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -116,13 +116,24 @@ def create_image_from_text(number, toc, audio, resources_dir, max_w=None, max_h=
                 h = bottom - top
                 if current_h + h > text_bottom_limit:
                     break
-                d.text(((max_w - w) / 2, current_h), wrapped_line, font=selected_font)
+                d.text(
+                    ((max_w - w) / 2, current_h),
+                    wrapped_line,
+                    font=selected_font,
+                    fill=(255, 255, 255),
+                )
                 current_h += h + pad
 
     (left, top, right, bottom) = d.textbbox(xy=(0, 0), text=f'{number}', font=number_font)
     w = right - left
     h = bottom - top
-    draw_underlined_text(d, ((max_w - w) / 2, int(max_h * 0.77)), f'{number}', font=number_font)
+    draw_underlined_text(
+        d,
+        ((max_w - w) / 2, int(max_h * 0.77)),
+        f'{number}',
+        font=number_font,
+        fill=(255, 255, 255),
+    )
 
     result = Path(audio).with_name('cover.jpg')
     img.save(result, quality=config['video'].get('cover_jpeg_quality', 70))

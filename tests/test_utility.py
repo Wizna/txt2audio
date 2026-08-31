@@ -415,6 +415,74 @@ class UtilityTests(unittest.TestCase):
 
         self.assertTrue(should_export)
 
+    def test_check_export_file_exists_reuses_wav_for_mp3_conversion(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_stem = Path(temp_dir) / 'chapter'
+            wav_path = output_stem.parent / 'chapter-1.wav'
+            wav_path.write_bytes(b'wav')
+
+            should_export = utility.check_export_file_exists(
+                str(output_stem),
+                1,
+                target_format='mp3',
+            )
+
+        self.assertFalse(should_export)
+
+    def test_check_export_file_exists_does_not_treat_mp3_as_wav(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_stem = Path(temp_dir) / 'chapter'
+            mp3_path = output_stem.parent / 'chapter-1.mp3'
+            mp3_path.write_bytes(b'mp3')
+
+            should_export = utility.check_export_file_exists(
+                str(output_stem),
+                1,
+                target_format='wav',
+            )
+
+        self.assertTrue(should_export)
+
+    def test_collect_clip_indices_finds_wav_after_converted_clip(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_stem = Path(temp_dir) / 'chapter'
+            (output_stem.parent / 'chapter-1.mp3').write_bytes(b'mp3')
+            (output_stem.parent / 'chapter-2.wav').write_bytes(b'wav')
+
+            indices = utility._collect_clip_indices(output_stem, [], '.wav')
+
+        self.assertEqual(indices, [2])
+
+    def test_insert_sentence_silence_updates_audio_and_subtitle_offsets(self):
+        import torch
+
+        entries = [(0.0, 0.4, '甲'), (0.4, 0.8, '乙')]
+        with patch.object(utility, 'INTER_SENTENCE_SILENCE_MS', 100):
+            audio, shifted = utility._insert_sentence_silence(
+                torch.ones(1, 1000), entries, 1000, torch,
+            )
+
+        self.assertEqual(audio.shape[-1], 1100)
+        self.assertEqual(shifted, [(0.0, 0.4, '甲'), (0.5, 0.9, '乙')])
+
+    def test_synthesize_sentence_group_inserts_silence_without_subtitles(self):
+        sentences = [
+            utility.SentenceSpec('甲。', '甲。', '甲', 1),
+            utility.SentenceSpec('乙。', '乙。', '乙', 1),
+        ]
+
+        with patch.object(utility, 'INTER_SENTENCE_SILENCE_MS', 100):
+            tensor, entries = utility._synthesize_sentence_group(
+                cosyvoice=FakeTts(),
+                sentences=sentences,
+                sample_rate=1000,
+                generate_subtitles=False,
+                torch_module=FakeTorch,
+            )
+
+        self.assertEqual(tensor.shape[-1], 2100)
+        self.assertEqual(entries, [])
+
     def test_construct_text_and_name_preserves_current_chapter_parsing(self):
         raw_data = '\n'.join([
             '开篇文字',
@@ -488,6 +556,14 @@ class UtilityTests(unittest.TestCase):
         })
         self.assertEqual(output_targets[2], Path('书名/第一卷/第一章/楔子'))
         self.assertEqual(contents[4], ['终章内容。'])
+
+    def test_construct_text_and_name_can_skip_toc_write(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir)
+            with patch.object(utility, 'OUTPUT_DIR', output_dir):
+                utility.construct_text_and_name('第一章\n正文。', '书名', write_toc=False)
+
+            self.assertFalse((output_dir / '书名').exists())
 
     def test_mask_punctuations_removes_urls_and_normalizes_sentence_end(self):
         self.assertEqual(utility.mask_punctuations('他说——你好 https://example.com'), '他说，你好。')
